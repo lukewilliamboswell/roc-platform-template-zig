@@ -9,7 +9,11 @@ pub fn build(b: *std.Build) void {
         .root_source_file = .{ .path = "host/main.zig" },
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
+
+    lib.force_pic = true;
+    lib.disable_stack_probing = true;
 
     b.installArtifact(lib);
 }

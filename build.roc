@@ -3,7 +3,6 @@ app [main] {
 }
 
 import cli.Cmd
-import cli.Path
 import cli.Task exposing [Task]
 
 main =
@@ -14,18 +13,14 @@ main =
     # the prebuilt binary `macos-arm64.a` changes based on target
     prebuiltBinaryPath = "platform/$(prebuiltBinaryName target)"
 
-    when Path.isFile (Path.fromStr prebuiltBinaryPath) |> Task.result! is
-        Ok _ ->
-            Task.ok {} # the prebuilt binary already exists... no need to rebuild
+    # build the host
+    Cmd.exec "zig" ["build", "-Doptimize=ReleaseSmall"]
+        |> Task.mapErr! ErrBuildingHost
 
-        Err _ ->
-            # build the host
-            Cmd.exec "zig" ["build"]
-                |> Task.mapErr! ErrBuildingHost
+    # copy pre-built binary into platform
+    Cmd.exec "cp" ["-f", "zig-out/lib/libhost.a", prebuiltBinaryPath]
+        |> Task.mapErr! ErrCopyPrebuiltBinary
 
-            # copy pre-built binary into platform
-            Cmd.exec "cp" ["-f", "zig-out/lib/libhost.a", prebuiltBinaryPath]
-                |> Task.mapErr! ErrCopyPrebuiltBinary
 
 getTarget : Task RocTarget _
 getTarget =
