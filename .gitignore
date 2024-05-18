@@ -1,0 +1,16 @@
+generated-docs/
+
+build
+app
+
+*.a
+*.tar.br
+*.tar.gz
+
+host/libhost.h
+
+host/glue/
+zig-cache/
+zig-out/
+build
+app
