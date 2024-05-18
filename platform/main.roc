@@ -5,11 +5,11 @@ platform ""
     imports [Task.{Task}, Stdout]
     provides [mainForHost]
 
-mainForHost : Task I32 I32
+mainForHost : Task {} I32
 mainForHost =
     Task.attempt main \res ->
         when res is
-            Ok {} -> Task.ok 0
+            Ok {} -> Task.ok {}
             Err (Exit code str) ->
                 if Str.isEmpty str then
                     Task.err code

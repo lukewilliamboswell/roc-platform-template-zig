@@ -106,18 +106,18 @@ const Allocator = mem.Allocator;
 extern fn roc__mainForHost_1_exposed_generic(*anyopaque) callconv(.C) void;
 extern fn roc__mainForHost_1_exposed_size() callconv(.C) i64;
 
-extern fn roc__mainForHost_0_caller(flags: *const u8, closure_data: *const u8, output: *RocResult(i32, i32)) void;
+extern fn roc__mainForHost_0_caller(flags: *const u8, closure_data: *const u8, output: *RocResult(void, i32)) void;
 
 fn call_the_closure(closure_data_ptr: *const u8) callconv(.C) i32 {
-    var out: RocResult(i32, i32) = .{
-        .payload = .{ .ok = 0 },
+    var out: RocResult(void, i32) = .{
+        .payload = .{ .ok = void{} },
         .tag = .RocOk,
     };
 
     roc__mainForHost_0_caller(
         undefined, // TODO do we need the flags?
         closure_data_ptr,
-        @as(*RocResult(i32, i32), @ptrCast(&out)),
+        @as(*RocResult(void, i32), @ptrCast(&out)),
     );
 
     switch (out.tag) {
