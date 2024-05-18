@@ -1,9 +1,24 @@
 platform ""
-    requires {} { main : Str }
-    exposes []
+    requires {} { main : Task {} [Exit I32 Str]_ }
+    exposes [Task, Stdout]
     packages {}
-    imports []
+    imports [Task.{Task}, Stdout]
     provides [mainForHost]
 
-mainForHost : Str
-mainForHost = main
+mainForHost : Task I32 I32
+mainForHost =
+    Task.attempt main \res ->
+        when res is
+            Ok {} -> Task.ok 0
+            Err (Exit code str) ->
+                if Str.isEmpty str then
+                    Task.err code
+                else
+                    Stdout.line str
+                    |> Task.onErr \_ -> Task.err code
+                    |> Task.await \{} -> Task.err code
+
+            Err err ->
+                Stdout.line "Program exited early with error: $(Inspect.toStr err)"
+                |> Task.onErr \_ -> Task.err 1
+                |> Task.await \_ -> Task.err 1
