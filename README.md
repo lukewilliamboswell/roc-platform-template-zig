@@ -4,7 +4,7 @@ This is a template for getting started with a [roc platform](https://www.roc-lan
 
 If you have any ideas to improve this template, please let me know. 😀
 
-I'm not an experienced Swift developer; any assistance with `glue.roc` spec would be most appreciated.
+I'm not an experienced zig developer; any assistance with `glue.roc` spec would be most appreciated.
 
 ## Developing locally
 
