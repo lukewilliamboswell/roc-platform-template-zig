@@ -9,7 +9,6 @@ app
 
 host/libhost.h
 
-host/glue/
 zig-cache/
 zig-out/
 build
