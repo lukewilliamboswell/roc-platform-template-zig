@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const str = @import("glue/str.zig");
+const str = @import("roc/str.zig");
 const RocStr = str.RocStr;
-const RocResult = @import("glue/result.zig").RocResult;
+const RocResult = @import("roc/result.zig").RocResult;
 const testing = std.testing;
 const expectEqual = testing.expectEqual;
 const expect = testing.expect;
@@ -149,7 +149,7 @@ pub fn main() void {
     if (exit_code == 0) {
         stdout.print("Runtime: {d:.3}ms\n", .{seconds * 1000}) catch unreachable;
     } else {
-        stderr.print("Exited with code {d}, in {d:.3}ms\n", .{exit_code, seconds * 1000}) catch unreachable;
+        stderr.print("Exited with code {d}, in {d:.3}ms\n", .{ exit_code, seconds * 1000 }) catch unreachable;
     }
 }
 

@@ -6,6 +6,7 @@ app
 *.a
 *.tar.br
 *.tar.gz
+*.ll
 
 host/libhost.h
 
@@ -15,3 +16,12 @@ build
 app
 
 .DS_Store
+
+# generated files
+host/roc/
+host/glue.zig
+host/glueForArch/
+host/types.json
+
+# ingore things that are WIP
+wip-*

@@ -7,10 +7,14 @@ import cli.Task exposing [Task]
 
 main =
 
+    # generate glue for builtins and platform
+    Cmd.exec "roc" ["glue", "glue.roc", "host/", "platform/main.roc"]
+        |> Task.mapErr! ErrGeneratingGlue
+
     # get the current OS and ARCH
     target = getTarget!
 
-    # the prebuilt binary `macos-arm64.a` changes based on target
+    # the prebuilt binary e.g. `macos-arm64.a` changes based on target
     prebuiltBinaryPath = "platform/$(prebuiltBinaryName target)"
 
     # build the host
@@ -20,7 +24,6 @@ main =
     # copy pre-built binary into platform
     Cmd.exec "cp" ["-f", "zig-out/lib/libhost.a", prebuiltBinaryPath]
         |> Task.mapErr! ErrCopyPrebuiltBinary
-
 
 getTarget : Task RocTarget _
 getTarget =
