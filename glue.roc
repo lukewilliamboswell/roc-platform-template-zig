@@ -26,14 +26,11 @@ makeGlue = \types ->
         |> Result.withDefault [],
 
         # include the types encoded as JSON to assist with debugging
-        [
-            {
-                name: "types.json",
-                content: Encode.toBytes types Json.utf8
-                |> Str.fromUtf8
-                |> Result.withDefault "INVALID UTF8 ENCODED FROM JSON",
-            },
-        ],
+        List.first types
+        |> Result.map \typesForArch -> [{ name: "types.json", content: Encode.toBytes  typesForArch Json.utf8
+        |> Str.fromUtf8
+        |> Result.withDefault "INVALID UTF8 ENCODED FROM JSON" }]
+        |> Result.withDefault [],
     ]
     |> List.join
     |> Ok
