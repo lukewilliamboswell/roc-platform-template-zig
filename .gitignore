@@ -32,3 +32,6 @@ wip-*
 
 .zig-cache/
 platform/dynhost
+
+# ignore the libapp that is built when making a dynhost
+libapp

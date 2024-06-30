@@ -7,8 +7,15 @@ echo "BUILDING HOST PRE-BUILT BINARIES -- THIS IS A TEMPORARY WORKAROUND UNTIL B
 echo "REMOVING OLD HOST"
 rm -f platform/*.a
 rm -f platform/*.lib
+rm -f platform/dynhost
 
 unset NIX_CFLAGS_COMPILE
+
+echo "generate out app.dylib or app.so file"
+roc build --lib libapp.roc
+
+echo "COPY dynhost INTO platform/"
+cp -f zig-out/bin/dynhost platform/dynhost
 
 echo "BUILDING HOST"
 zig build
@@ -18,9 +25,3 @@ cp -f zig-out/lib/libhost.a platform/macos-arm64.a
 cp -f zig-out/lib/libhost.a platform/macos-x64.a
 cp -f zig-out/lib/libhost.a platform/linux-arm64.a
 cp -f zig-out/lib/libhost.a platform/linux-x64.a
-
-echo "generate out app.dylib or app.so file"
-roc build --lib libapp.roc
-
-echo "COPY dynhost INTO platform/"
-cp -f zig-out/bin/dynhost platform/dynhost
