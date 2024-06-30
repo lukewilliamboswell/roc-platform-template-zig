@@ -8,6 +8,9 @@ app
 *.tar.gz
 *.ll
 *.lib
+*.dylib
+*.so
+
 
 host/libhost.h
 
@@ -26,3 +29,6 @@ host/types.json
 
 # ingore things that are WIP
 wip-*
+
+.zig-cache/
+platform/dynhost

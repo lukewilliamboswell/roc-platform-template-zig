@@ -53,26 +53,26 @@ fn testing_roc_dbg(loc: *anyopaque, message: *anyopaque, src: *anyopaque) callco
     _ = loc;
 }
 
-comptime {
-    // During tests, use the testing allocators to satisfy these functions.
-    if (builtin.is_test) {
-        @export(testing_roc_alloc, .{ .name = "roc_alloc", .linkage = .Strong });
-        @export(testing_roc_realloc, .{ .name = "roc_realloc", .linkage = .Strong });
-        @export(testing_roc_dealloc, .{ .name = "roc_dealloc", .linkage = .Strong });
-        @export(testing_roc_panic, .{ .name = "roc_panic", .linkage = .Strong });
-        @export(testing_roc_dbg, .{ .name = "roc_dbg", .linkage = .Strong });
+// comptime {
+//     // During tests, use the testing allocators to satisfy these functions.
+//     if (builtin.is_test) {
+//         @export(testing_roc_alloc, .{ .name = "roc_alloc", .linkage = .strong });
+//         @export(testing_roc_realloc, .{ .name = "roc_realloc", .linkage = .strong });
+//         @export(testing_roc_dealloc, .{ .name = "roc_dealloc", .linkage = .strong });
+//         @export(testing_roc_panic, .{ .name = "roc_panic", .linkage = .strong });
+//         @export(testing_roc_dbg, .{ .name = "roc_dbg", .linkage = .strong });
 
-        if (builtin.os.tag == .macos or builtin.os.tag == .linux) {
-            @export(testing_roc_getppid, .{ .name = "roc_getppid", .linkage = .Strong });
-            @export(testing_roc_mmap, .{ .name = "roc_mmap", .linkage = .Strong });
-            @export(testing_roc_shm_open, .{ .name = "roc_shm_open", .linkage = .Strong });
-        }
+//         if (builtin.os.tag == .macos or builtin.os.tag == .linux) {
+//             @export(testing_roc_getppid, .{ .name = "roc_getppid", .linkage = .strong });
+//             @export(testing_roc_mmap, .{ .name = "roc_mmap", .linkage = .strong });
+//             @export(testing_roc_shm_open, .{ .name = "roc_shm_open", .linkage = .strong });
+//         }
 
-        if (builtin.os.tag == .windows) {
-            @export(roc_getppid_windows_stub, .{ .name = "roc_getppid", .linkage = .Strong });
-        }
-    }
-}
+//         if (builtin.os.tag == .windows) {
+//             @export(roc_getppid_windows_stub, .{ .name = "roc_getppid", .linkage = .strong });
+//         }
+//     }
+// }
 
 fn testing_roc_alloc(size: usize, _: u32) callconv(.C) ?*anyopaque {
     // We store an extra usize which is the size of the full allocation.
@@ -224,7 +224,7 @@ pub fn decrefRcPtrC(
     // (NOT the start of the data, or the start of the allocation)
 
     // this is of course unsafe, but we trust what we get from the llvm side
-    var bytes = @as([*]isize, @ptrCast(bytes_or_null));
+    const bytes = @as([*]isize, @ptrCast(bytes_or_null));
 
     return @call(.always_inline, decref_ptr_to_refcount, .{ bytes, alignment });
 }
@@ -243,7 +243,7 @@ pub fn decrefDataPtrC(
     bytes_or_null: ?[*]u8,
     alignment: u32,
 ) callconv(.C) void {
-    var bytes = bytes_or_null orelse return;
+    const bytes = bytes_or_null orelse return;
 
     const data_ptr = @intFromPtr(bytes);
     const tag_mask: usize = if (@sizeOf(usize) == 8) 0b111 else 0b11;
@@ -259,7 +259,7 @@ pub fn increfDataPtrC(
     bytes_or_null: ?[*]u8,
     inc_amount: isize,
 ) callconv(.C) void {
-    var bytes = bytes_or_null orelse return;
+    const bytes = bytes_or_null orelse return;
 
     const ptr = @intFromPtr(bytes);
     const tag_mask: usize = if (@sizeOf(usize) == 8) 0b111 else 0b11;
@@ -274,7 +274,7 @@ pub fn freeDataPtrC(
     bytes_or_null: ?[*]u8,
     alignment: u32,
 ) callconv(.C) void {
-    var bytes = bytes_or_null orelse return;
+    const bytes = bytes_or_null orelse return;
 
     const ptr = @intFromPtr(bytes);
     const tag_mask: usize = if (@sizeOf(usize) == 8) 0b111 else 0b11;
@@ -290,7 +290,7 @@ pub fn freeRcPtrC(
     bytes_or_null: ?[*]isize,
     alignment: u32,
 ) callconv(.C) void {
-    var bytes = bytes_or_null orelse return;
+    const bytes = bytes_or_null orelse return;
     return free_ptr_to_refcount(bytes, alignment);
 }
 
@@ -303,7 +303,7 @@ pub fn decref(
         return;
     }
 
-    var bytes = bytes_or_null orelse return;
+    const bytes = bytes_or_null orelse return;
 
     const isizes: [*]isize = @as([*]isize, @ptrCast(@alignCast(bytes)));
 
@@ -357,7 +357,7 @@ inline fn decref_ptr_to_refcount(
                 }
             },
             Refcount.atomic => {
-                var last = @atomicRmw(isize, &refcount_ptr[0], std.builtin.AtomicRmwOp.Sub, 1, Monotonic);
+                const last = @atomicRmw(isize, &refcount_ptr[0], std.builtin.AtomicRmwOp.Sub, 1, Monotonic);
                 if (last == REFCOUNT_ONE_ISIZE) {
                     free_ptr_to_refcount(refcount_ptr, alignment);
                 }
@@ -370,7 +370,7 @@ inline fn decref_ptr_to_refcount(
 pub fn isUnique(
     bytes_or_null: ?[*]u8,
 ) callconv(.C) bool {
-    var bytes = bytes_or_null orelse return true;
+    const bytes = bytes_or_null orelse return true;
 
     const ptr = @intFromPtr(bytes);
     const tag_mask: usize = if (@sizeOf(usize) == 8) 0b111 else 0b11;
@@ -450,7 +450,7 @@ pub fn allocateWithRefcount(
     const alignment = @max(ptr_width, element_alignment);
     const length = alignment + data_bytes;
 
-    var new_bytes: [*]u8 = alloc(length, alignment) orelse unreachable;
+    const new_bytes: [*]u8 = alloc(length, alignment) orelse unreachable;
 
     if (DEBUG_ALLOC and builtin.target.cpu.arch != .wasm32) {
         std.debug.print("+ allocated {*} ({} bytes with alignment {})\n", .{ new_bytes, data_bytes, alignment });
@@ -506,14 +506,14 @@ pub const UpdateMode = enum(u8) {
 
 test "increfC, refcounted data" {
     var mock_rc: isize = REFCOUNT_ONE_ISIZE + 17;
-    var ptr_to_refcount: *isize = &mock_rc;
+    const ptr_to_refcount: *isize = &mock_rc;
     increfRcPtrC(ptr_to_refcount, 2);
     try std.testing.expectEqual(mock_rc, REFCOUNT_ONE_ISIZE + 19);
 }
 
 test "increfC, static data" {
     var mock_rc: isize = REFCOUNT_MAX_ISIZE;
-    var ptr_to_refcount: *isize = &mock_rc;
+    const ptr_to_refcount: *isize = &mock_rc;
     increfRcPtrC(ptr_to_refcount, 2);
     try std.testing.expectEqual(mock_rc, REFCOUNT_MAX_ISIZE);
 }
