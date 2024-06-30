@@ -19,7 +19,7 @@ app
 .DS_Store
 
 # generated files
-host/roc/
+#host/roc/
 host/glue.zig
 host/glueForArch/
 host/types.json
