@@ -1,7 +1,9 @@
 # this module will be replaced when effect interpreters are implemented
-module [
+hosted PlatformTask
+    exposes [
         stdoutLine,
     ]
+    imports []
 
-# effects that are provided by the host
+# tasks that are provided by the host
 stdoutLine : Str -> Task {} Str
