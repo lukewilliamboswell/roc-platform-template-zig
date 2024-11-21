@@ -4,8 +4,6 @@ This is a template for getting started with a [roc platform](https://www.roc-lan
 
 If you have any ideas to improve this template, please let me know. 😀
 
-I'm not an experienced zig developer; any assistance with `glue.roc` spec would be most appreciated.
-
 ## Developing locally
 
 Build the platform with `roc build.roc` to produce the prebuilt-binaries in `platform/`.

@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 // TODO RESTORE CROSS COMPILATION
 // const TARGETS = [_]std.zig.CrossTarget{
@@ -12,16 +13,22 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
+    const host_target = b.standardTargetOptions(.{
+        .default_target = std.zig.CrossTarget{
+            .cpu_model = .baseline,
+            .os_tag = builtin.os.tag,
+        },
+    });
 
     const exe = b.addExecutable(.{
         .name = "dynhost",
-        .root_source_file = b.path("host/main.zig"),
-        .target = b.host,
+        .root_source_file = .{ .path = "host/main.zig" },
+        .target = host_target,
         .optimize = optimize,
         .link_libc = true,
     });
 
-    exe.addLibraryPath(b.path("."));
+    exe.addLibraryPath(.{ .path = "." });
     exe.linkSystemLibrary("app");
 
     b.installArtifact(exe);
@@ -35,12 +42,13 @@ pub fn build(b: *std.Build) !void {
 
     const lib = b.addStaticLibrary(.{
         .name = "host",
-        .root_source_file = b.path("host/main.zig"),
-        .target = b.host,
+        .root_source_file = .{ .path = "host/main.zig" },
+        .target = host_target,
         .optimize = optimize,
         .link_libc = true,
-        .pic = true,
     });
+
+    lib.force_pic = true;
 
     b.installArtifact(lib);
 }

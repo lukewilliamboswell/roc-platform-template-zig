@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const str = @import("roc/str.zig");
+const str = @import("vendor/str.zig");
 const RocStr = str.RocStr;
-const RocResult = @import("roc/result.zig").RocResult;
+const RocResult = @import("result.zig").RocResult;
 const testing = std.testing;
 const expectEqual = testing.expectEqual;
 const expect = testing.expect;
@@ -90,13 +90,13 @@ fn roc_mmap(addr: ?*anyopaque, length: c_uint, prot: c_int, flags: c_int, fd: c_
 
 comptime {
     if (builtin.os.tag == .macos or builtin.os.tag == .linux) {
-        @export(roc_getppid, .{ .name = "roc_getppid", .linkage = .strong });
-        @export(roc_mmap, .{ .name = "roc_mmap", .linkage = .strong });
-        @export(roc_shm_open, .{ .name = "roc_shm_open", .linkage = .strong });
+        @export(roc_getppid, .{ .name = "roc_getppid", .linkage = .Strong });
+        @export(roc_mmap, .{ .name = "roc_mmap", .linkage = .Strong });
+        @export(roc_shm_open, .{ .name = "roc_shm_open", .linkage = .Strong });
     }
 
     if (builtin.os.tag == .windows) {
-        @export(roc_getppid_windows_stub, .{ .name = "roc_getppid", .linkage = .strong });
+        @export(roc_getppid_windows_stub, .{ .name = "roc_getppid", .linkage = .Strong });
     }
 }
 
