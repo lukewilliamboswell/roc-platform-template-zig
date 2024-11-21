@@ -1,5 +1,7 @@
 generated-docs/
 
+examples/hello
+
 build
 app
 
@@ -10,7 +12,8 @@ app
 *.lib
 *.dylib
 *.so
-
+*.lib
+*.o
 
 host/libhost.h
 
