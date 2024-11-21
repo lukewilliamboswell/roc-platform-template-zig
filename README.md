@@ -37,6 +37,12 @@ Roc loves Zig
 
 **Note** for linux users you may need to include `--linker legacy`
 
+### Step 3. Run all the tests
+
+```
+$ ROC=roc EXAMPLES_DIR=examples/ ./ci/all_tests.sh
+```
+
 ## Packaging the platform
 
 Bundle the platform first using `roc build.roc`, and then create a bundle with:
