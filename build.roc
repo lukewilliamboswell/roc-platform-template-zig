@@ -6,16 +6,14 @@ import cli.Cmd
 
 main =
 
+    Cmd.exec "roc" ["build", "--lib", "--output", "platform/libapp.dylib", "platform/stub.roc"]
+    |> Task.mapErr! ErrBuildingStubDylib
+
     Cmd.exec "zig" ["build", "-Doptimize=ReleaseFast"]
-        |> Task.mapErr! ErrBuildingHost
+    |> Task.mapErr! ErrBuildingZigHost
 
     Cmd.exec "cp" ["-f", "zig-out/lib/libhost.a", "platform/libhost.a"]
-        |> Task.mapErr! ErrCopyPrebuiltBinary
+    |> Task.mapErr! ErrCopyPrebuiltLegacyHost
 
-    ## copy pre-built binaries into platform
-    #copyPrebuiltBinary! { from: "zig-out/lib/libmacos-aarch64.a", to: "platform/macos-arm64.a" }
-    #copyPrebuiltBinary! { from: "zig-out/lib/libmacos-x86_64.a", to: "platform/macos-x64.a" }
-    #copyPrebuiltBinary! { from: "zig-out/lib/liblinux-aarch64.a", to: "platform/linux-arm64.a" }
-    #copyPrebuiltBinary! { from: "zig-out/lib/liblinux-x86_64.a", to: "platform/linux-x64.a" }
-    #copyPrebuiltBinary! { from: "zig-out/lib/windows-aarch64.lib", to: "platform/windows-arm64.lib" }
-    #copyPrebuiltBinary! { from: "zig-out/lib/windows-x86_64.lib", to: "platform/windows-x64.lib" }
+    Cmd.exec "roc" ["preprocess-host", "zig-out/bin/dynhost", "platform/main.roc", "platform/libapp.dylib"]
+    |> Task.mapErr! ErrBuildingPrebuiltSurgicalHost

@@ -14,6 +14,8 @@ app
 *.so
 *.lib
 *.o
+*.rh
+*.rm
 
 host/libhost.h
 
