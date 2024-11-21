@@ -1,6 +1,8 @@
 generated-docs/
 
 examples/hello
+examples/exit_code_msg
+examples/exit_tag
 
 build
 app

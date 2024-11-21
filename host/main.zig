@@ -103,7 +103,7 @@ comptime {
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
-extern fn roc__mainForHost_1_exposed(i32) callconv(.C) RocResult(void, i32);
+extern fn roc__mainForHost_1_exposed(i32) callconv(.C) i32;
 
 pub fn main() void {
     const stdout = std.io.getStdOut().writer();
@@ -111,15 +111,17 @@ pub fn main() void {
 
     var timer = std.time.Timer.start() catch unreachable;
 
-    const result = roc__mainForHost_1_exposed(0);
+    const exit_code = roc__mainForHost_1_exposed(0);
 
     const nanos = timer.read();
     const seconds = (@as(f64, @floatFromInt(nanos)) / 1_000_000_000.0);
 
-    if (result.tag == .RocOk) {
+    // std.debug.print("{}", .{result});
+
+    if (exit_code == 0) {
         stdout.print("Runtime: {d:.3}ms\n", .{seconds * 1000}) catch unreachable;
     } else {
-        stderr.print("Exited with code {d}, in {d:.3}ms\n", .{ result.payload.err, seconds * 1000 }) catch unreachable;
+        stderr.print("Exited with code {d}, in {d:.3}ms\n", .{ exit_code, seconds * 1000 }) catch unreachable;
     }
 }
 

@@ -7,19 +7,19 @@ platform ""
 
 import Stdout
 
-mainForHost! : I32 => Result {} I32
+mainForHost! : I32 => I32
 mainForHost! = \_ ->
     result = main! {}
 
     when result is
-        Ok {} -> Ok {}
+        Ok {} -> 0
         Err (Exit code str) ->
             if Str.isEmpty str then
-                Err code
+                code
             else
                 Stdout.line! str
-                Err code
+                code
 
         Err other ->
             Stdout.line! "Program exited early with error: $(Inspect.toStr other)"
-            Err 1
+            1
