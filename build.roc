@@ -38,7 +38,7 @@ buildSurgicalHost = \os ->
     when os is
         LINUX ->
             # prebuilt surgical hosts are only supported/used on linux for now
-            Cmd.exec "roc" ["preprocess-host", "zig-out/bin/dynhost", "platform/main.roc", "platform/libapp.dylib"]
+            Cmd.exec "roc" ["preprocess-host", "zig-out/bin/dynhost", "platform/main.roc", "platform/libapp.so"]
             |> Task.mapErr! ErrBuildingPrebuiltSurgicalHost
         _ ->
             Task.ok {}
