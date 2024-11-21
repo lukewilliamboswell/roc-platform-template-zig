@@ -35,8 +35,6 @@ $ roc examples/hello.roc
 Roc loves Zig
 ```
 
-**Note** for linux users you may need to include `--linker legacy`
-
 ### Step 3. Run all the tests
 
 ```

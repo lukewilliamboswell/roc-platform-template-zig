@@ -28,7 +28,7 @@ done
 
 # roc build
 for ROC_FILE in $EXAMPLES_DIR/*.roc; do
-    $ROC build $ROC_FILE --linker=legacy
+    $ROC build $ROC_FILE
 done
 
 # check output
