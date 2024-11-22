@@ -9,7 +9,9 @@ main =
 
     { os, arch } = Env.platform!
 
-    buildStub! os
+    roc = Env.var "ROC" |> Task.result! |> Result.withDefault "roc"
+
+    buildStub! roc os
 
     # Note we use ReleaseFast to disable the stack probe which causes issues on Intel Macs
     #
@@ -35,28 +37,28 @@ main =
     Cmd.exec "cp" ["-f", "zig-out/lib/libhost.a", "./platform/libhost.a"]
     |> Task.mapErr! ErrCopyPrebuiltLegacyHost
 
-    buildSurgicalHost! os arch
+    buildSurgicalHost! roc os arch
 
-buildStub = \os ->
+buildStub = \roc, os ->
     # zig will link these shared libraries to build a dynhost executable
     # which is used to build the surgical host
     when os is
         LINUX ->
-            Cmd.exec "roc" ["build", "--lib", "--output", "./platform/libapp.so", "./platform/stub.roc"]
+            Cmd.exec roc ["build", "--lib", "--output", "./platform/libapp.so", "./platform/stub.roc"]
             |> Task.mapErr ErrBuildingStubDylibLinux
         MACOS ->
-            Cmd.exec "roc" ["build", "--lib", "--output", "./platform/libapp.dylib", "./platform/stub.roc"]
+            Cmd.exec roc ["build", "--lib", "--output", "./platform/libapp.dylib", "./platform/stub.roc"]
             |> Task.mapErr ErrBuildingStubDylibMacos
         WINDOWS ->
-            Cmd.exec "roc" ["build", "--lib", "--output", "./platform/app.lib", "./platform/stub.roc"]
+            Cmd.exec roc ["build", "--lib", "--output", "./platform/app.lib", "./platform/stub.roc"]
             |> Task.mapErr ErrBuildingStubDylibWindows
         OTHER osStr ->
             crash "OS $(osStr) not supported, build.roc probably needs updating"
 
-buildSurgicalHost = \os, arch ->
+buildSurgicalHost = \roc, os, arch ->
     if os == LINUX && arch == X64 then
         # prebuilt surgical hosts are only supported/used on linux-x64 for now
-        Cmd.exec "roc" ["preprocess-host", "zig-out/bin/dynhost", "./platform/main.roc", "./platform/libapp.so"]
+        Cmd.exec roc ["preprocess-host", "zig-out/bin/dynhost", "./platform/main.roc", "./platform/libapp.so"]
         |> Task.mapErr! ErrBuildingPrebuiltSurgicalHostLinuxX64
     else
         Task.ok {}

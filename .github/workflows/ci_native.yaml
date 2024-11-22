@@ -69,7 +69,7 @@ jobs:
           ls -la
 
       - name: build the platform
-        run: ./roc_nightly/roc build.roc
+        run: ROC=./roc_nightly/roc ./roc_nightly/roc build.roc
 
       - name: run the tests
         run: ROC=./roc_nightly/roc EXAMPLES_DIR=./examples/ ./ci/all_tests.sh
