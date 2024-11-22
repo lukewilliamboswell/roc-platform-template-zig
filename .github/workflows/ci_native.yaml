@@ -20,7 +20,7 @@ jobs:
             roc-archive: roc_nightly-linux_x86_64-latest.tar.gz
             package-manager: apt
           - operating-system: macos-13
-            roc-archive: roc_nightly-macos_apple_silicon-latest.tar.gz
+            roc-archive: roc_nightly-macos_x86_64-latest.tar.gz
             package-manager: brew
           - operating-system: macos-14
             roc-archive: roc_nightly-macos_apple_silicon-latest.tar.gz
@@ -46,9 +46,6 @@ jobs:
       - name: simplify nightly folder name
         run: mv roc_nightly* roc_nightly
 
-      - name: check roc version
-        run: ./roc_nightly/roc version
-
       - name: install expect for testing (Linux)
         if: runner.os == 'Linux'
         run: sudo apt install -y expect
@@ -57,11 +54,22 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install expect
 
+      - name: check zig version
+        run: zig version
+
+      - name: check roc version
+        run: ./roc_nightly/roc version
+
       - name: check expect version
         run: expect -v
 
-      - name: Build the platform
+      - name: show current directory
+        run: |
+          pwd
+          ls -la
+
+      - name: build the platform
         run: ./roc_nightly/roc build.roc
 
-      - name: Run all tests
+      - name: run the tests
         run: ROC=./roc_nightly/roc EXAMPLES_DIR=./examples/ ./ci/all_tests.sh
