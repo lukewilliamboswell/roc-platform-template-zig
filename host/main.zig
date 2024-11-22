@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const str = @import("roc/str.zig");
+const str = @import("vendor/str.zig");
 const RocStr = str.RocStr;
-const RocResult = @import("roc/result.zig").RocResult;
+const RocResult = @import("result.zig").RocResult;
 const testing = std.testing;
 const expectEqual = testing.expectEqual;
 const expect = testing.expect;
@@ -18,7 +18,7 @@ const DEBUG: bool = false;
 
 export fn roc_alloc(size: usize, alignment: u32) callconv(.C) ?*anyopaque {
     if (DEBUG) {
-        var ptr = malloc(size);
+        const ptr = malloc(size);
         const stdout = std.io.getStdOut().writer();
         stdout.print("alloc:   {d} (alignment {d}, size {d})\n", .{ ptr, alignment, size }) catch unreachable;
         return ptr;
@@ -100,63 +100,22 @@ comptime {
     }
 }
 
-const mem = std.mem;
-const Allocator = mem.Allocator;
-
-extern fn roc__mainForHost_1_exposed_generic(*anyopaque) callconv(.C) void;
-extern fn roc__mainForHost_1_exposed_size() callconv(.C) i64;
-
-extern fn roc__mainForHost_0_caller(flags: *const u8, closure_data: *const u8, output: *RocResult(void, i32)) void;
-
-fn call_the_closure(closure_data_ptr: *const u8) callconv(.C) i32 {
-    var out: RocResult(void, i32) = .{
-        .payload = .{ .ok = void{} },
-        .tag = .RocOk,
-    };
-
-    roc__mainForHost_0_caller(
-        undefined, // TODO do we need the flags?
-        closure_data_ptr,
-        @as(*RocResult(void, i32), @ptrCast(&out)),
-    );
-
-    switch (out.tag) {
-        .RocOk => return 0,
-        .RocErr => return out.payload.err,
-    }
-}
-
-const Unit = extern struct {};
+extern fn roc__mainForHost_1_exposed(i32) callconv(.C) i32;
 
 pub fn main() void {
-    const stdout = std.io.getStdOut().writer();
+    // const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
-    var timer = std.time.Timer.start() catch unreachable;
+    const exit_code = roc__mainForHost_1_exposed(0);
 
-    // call into roc
-    const size = @as(usize, @intCast(roc__mainForHost_1_exposed_size()));
-    const captures = roc_alloc(size, @alignOf(u128)).?;
-    defer roc_dealloc(captures, @alignOf(u128));
-
-    roc__mainForHost_1_exposed_generic(captures);
-
-    var exit_code = call_the_closure(@as(*const u8, @ptrCast(captures)));
-
-    const nanos = timer.read();
-    const seconds = (@as(f64, @floatFromInt(nanos)) / 1_000_000_000.0);
-
-    if (exit_code == 0) {
-        stdout.print("Runtime: {d:.3}ms\n", .{seconds * 1000}) catch unreachable;
-    } else {
-        stderr.print("Exited with code {d}, in {d:.3}ms\n", .{ exit_code, seconds * 1000 }) catch unreachable;
+    if (exit_code != 0) {
+        stderr.print("Exited with code {d}\n", .{exit_code}) catch unreachable;
     }
 }
 
 // an example effect to provide to the platform
 // this is where roc will call back into the host
-export fn roc_fx_stdoutLine(msg: *RocStr) callconv(.C) RocResult(void, RocStr) {
+export fn roc_fx_stdoutLine(msg: *RocStr) callconv(.C) void {
     const stdout = std.io.getStdOut().writer();
     stdout.print("{s}\n", .{msg.asSlice()}) catch unreachable;
-    return .{ .payload = .{ .ok = void{} }, .tag = .RocOk };
 }

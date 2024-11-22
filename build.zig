@@ -1,34 +1,36 @@
 const std = @import("std");
-
-const TARGETS = [_]std.zig.CrossTarget{
-    .{ .cpu_arch = .aarch64, .os_tag = .linux },
-    .{ .cpu_arch = .aarch64, .os_tag = .macos },
-    .{ .cpu_arch = .aarch64, .os_tag = .windows },
-    .{ .cpu_arch = .x86_64, .os_tag = .linux },
-    .{ .cpu_arch = .x86_64, .os_tag = .macos },
-    .{ .cpu_arch = .x86_64, .os_tag = .windows },
-};
+const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
+    const host_target = b.standardTargetOptions(.{});
 
-    for (TARGETS) |target| {
-        const name = try std.fmt.allocPrint(b.allocator, "{s}-{s}", .{
-            @tagName(target.os_tag.?),
-            @tagName(target.cpu_arch.?),
-        });
+    // BUILD THE LEGACY PREBUILT HOST e.g. `platform/libhost.a`, `platform/macos-aarch64.a`
 
-        const lib = b.addStaticLibrary(.{
-            .name = name,
-            .root_source_file = .{ .path = "host/main.zig" },
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-        });
+    const lib = b.addStaticLibrary(.{
+        .name = "host",
+        .root_source_file = .{ .path = "host/main.zig" },
+        .target = host_target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
 
-        lib.force_pic = true;
-        lib.disable_stack_probing = true;
+    lib.force_pic = true;
 
-        b.installArtifact(lib);
-    }
+    b.installArtifact(lib);
+
+    // BUILD THE SURGICAL PREBUILT HOST e.g. `platform/host.rh`, `platform/linux-x64.rh`
+
+    const exe = b.addExecutable(.{
+        .name = "dynhost",
+        .root_source_file = .{ .path = "host/main.zig" },
+        .target = host_target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    exe.addLibraryPath(.{ .path = "platform/" });
+    exe.linkSystemLibrary("app");
+
+    b.installArtifact(exe);
 }

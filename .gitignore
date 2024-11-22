@@ -1,5 +1,9 @@
 generated-docs/
 
+examples/hello
+examples/exit_code_msg
+examples/exit_tag
+
 build
 app
 
@@ -8,6 +12,12 @@ app
 *.tar.gz
 *.ll
 *.lib
+*.dylib
+*.so
+*.lib
+*.o
+*.rh
+*.rm
 
 host/libhost.h
 
@@ -19,10 +29,16 @@ app
 .DS_Store
 
 # generated files
-host/roc/
+#host/roc/
 host/glue.zig
 host/glueForArch/
 host/types.json
 
 # ingore things that are WIP
 wip-*
+
+.zig-cache/
+platform/dynhost
+
+# ignore the libapp that is built when making a dynhost
+libapp
