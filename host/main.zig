@@ -100,9 +100,6 @@ comptime {
     }
 }
 
-const mem = std.mem;
-const Allocator = mem.Allocator;
-
 extern fn roc__mainForHost_1_exposed(i32) callconv(.C) i32;
 
 pub fn main() void {

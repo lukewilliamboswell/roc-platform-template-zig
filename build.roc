@@ -20,7 +20,8 @@ main =
     buildSurgicalHost! os arch
 
 buildStub = \os ->
-    # prebuilt surgical hosts are only supported on linux for now
+    # zig will link these shared libraries to build a dynhost executable
+    # which is used to build the surgical host
     when os is
         LINUX ->
             Cmd.exec "roc" ["build", "--lib", "--output", "platform/libapp.so", "platform/stub.roc"]
@@ -36,7 +37,7 @@ buildStub = \os ->
 
 buildSurgicalHost = \os, arch ->
     if os == LINUX && arch == X64 then
-        # prebuilt surgical hosts are only supported/used on linux_x64 for now
+        # prebuilt surgical hosts are only supported/used on linux-x64 for now
         Cmd.exec "roc" ["preprocess-host", "zig-out/bin/dynhost", "platform/main.roc", "platform/libapp.so"]
         |> Task.mapErr! ErrBuildingPrebuiltSurgicalHostLinuxX64
     else
