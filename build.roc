@@ -7,7 +7,7 @@ import cli.Env
 
 main =
 
-    { os } = Env.platform!
+    { os, arch } = Env.platform!
 
     buildStub! os
 
@@ -17,7 +17,7 @@ main =
     Cmd.exec "cp" ["-f", "zig-out/lib/libhost.a", "platform/libhost.a"]
     |> Task.mapErr! ErrCopyPrebuiltLegacyHost
 
-    buildSurgicalHost! os
+    buildSurgicalHost! os arch
 
 buildStub = \os ->
     # prebuilt surgical hosts are only supported on linux for now
@@ -34,11 +34,10 @@ buildStub = \os ->
         OTHER osStr ->
             crash "OS $(osStr) not supported, build.roc probably needs updating"
 
-buildSurgicalHost = \os ->
-    when os is
-        LINUX ->
-            # prebuilt surgical hosts are only supported/used on linux for now
-            Cmd.exec "roc" ["preprocess-host", "zig-out/bin/dynhost", "platform/main.roc", "platform/libapp.so"]
-            |> Task.mapErr! ErrBuildingPrebuiltSurgicalHost
-        _ ->
-            Task.ok {}
+buildSurgicalHost = \os, arch ->
+    if os == LINUX && arch == X64 then
+        # prebuilt surgical hosts are only supported/used on linux_x64 for now
+        Cmd.exec "roc" ["preprocess-host", "zig-out/bin/dynhost", "platform/main.roc", "platform/libapp.so"]
+        |> Task.mapErr! ErrBuildingPrebuiltSurgicalHostLinuxX64
+    else
+        Task.ok {}
