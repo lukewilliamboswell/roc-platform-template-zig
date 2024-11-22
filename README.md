@@ -26,6 +26,8 @@ $ roc build.roc
 
 Build the platform with `roc build.roc` to produce the prebuilt-binaries in `platform/`.
 
+**Note** we use `-Doptimize=ReleaseFast` when building the zig host, to disable the stack probe which causes issues on Intel Macs. You may wish to remove this if you want debug symbols.
+
 ### Step 2. Run an example
 
 After the platform is build, you can run an example using `roc`.
