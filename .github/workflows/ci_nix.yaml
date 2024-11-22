@@ -13,7 +13,8 @@ jobs:
       fail-fast: false
       matrix:
         # macos-13 uses x86-64 machine, macos-14 uses aarch64
-        os: [macos-13, macos-14, ubuntu-22.04]
+        # I just use ubuntu here, as I run apple silicon mac locally so no need to test it here
+        os: [ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3

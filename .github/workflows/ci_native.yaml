@@ -1,0 +1,59 @@
+on:
+  pull_request:
+  workflow_dispatch:
+
+# this cancels workflows currently in progress if you start a new one
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test-native:
+    runs-on: ${{ matrix.operating-system }}
+    strategy:
+      matrix:
+        operating-system: [macos-13, macos-14, ubuntu-20.04, ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: korandoru/setup-zig@v1
+        with:
+          zig-version: 0.11.0 # released versions or master
+
+      - name: fetch latest release
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            curl -fOL https://github.com/roc-lang/roc/releases/download/nightly/roc_nightly-linux_x86_64-latest.tar.gz
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            if [ "$(uname -m)" == "arm64" ]; then
+              curl -fOL https://github.com/roc-lang/roc/releases/download/nightly/roc_nightly-macos_apple_silicon-latest.tar.gz
+            else
+              curl -fOL https://github.com/roc-lang/roc/releases/download/nightly/roc_nightly-macos_x86_64-latest.tar.gz
+            fi
+          else
+            echo "Unsupported operating system"
+            exit 1
+          fi
+
+      - name: rename nightly tar
+        run: mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
+
+      - name: decompress the tar
+        run: tar -xzf roc_nightly.tar.gz
+
+      - name: remove tar
+        run: rm roc_nightly.tar.gz
+
+      - name: simplify nightly folder name
+        run: mv roc_nightly* roc_nightly
+
+      - name: check roc version
+        run: ./roc_nightly/roc version
+
+      - name: install expect for testing
+        run: sudo apt install -y expect
+
+      - name: check expect version
+        run: expect -v
+
+      - name: Run all tests
+        run: ROC=./roc_nightly/roc EXAMPLES_DIR=./examples/ ./ci/all_tests.sh
