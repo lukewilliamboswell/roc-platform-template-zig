@@ -10,13 +10,7 @@ If you have any ideas to improve this template, please let me know. 😀
 
 Dependencies:
 - Nix package manager `nix develop`
-- Otherwise ensure you have Roc and Zig **0.11.0**
-
-**Note** we can upgrade to zig 0.13.0 when
-https://github.com/roc-lang/roc/pull/6921 lands. You can do this now if you
-would prefer to use 0.13.0 just be sure to copy the builtins `*.zig` from that
-branch. In future we should have a `roc_std` zig package that is more suitable
-for platform development, but the builtins are ok for now.
+- Otherwise ensure you have Roc and Zig **0.13.0**
 
 ### Step 1. Build the platform
 
