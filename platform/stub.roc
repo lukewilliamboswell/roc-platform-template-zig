@@ -2,4 +2,4 @@
 app [main!] { pf: platform "../platform/main.roc" }
 
 main! : {} => Result {} _
-main! = \{} -> Ok {}
+main! = |{}| Ok({})

@@ -90,23 +90,23 @@ fn roc_mmap(addr: ?*anyopaque, length: c_uint, prot: c_int, flags: c_int, fd: c_
 
 comptime {
     if (builtin.os.tag == .macos or builtin.os.tag == .linux) {
-        @export(roc_getppid, .{ .name = "roc_getppid", .linkage = .Strong });
-        @export(roc_mmap, .{ .name = "roc_mmap", .linkage = .Strong });
-        @export(roc_shm_open, .{ .name = "roc_shm_open", .linkage = .Strong });
+        @export(roc_getppid, .{ .name = "roc_getppid", .linkage = .strong });
+        @export(roc_mmap, .{ .name = "roc_mmap", .linkage = .strong });
+        @export(roc_shm_open, .{ .name = "roc_shm_open", .linkage = .strong });
     }
 
     if (builtin.os.tag == .windows) {
-        @export(roc_getppid_windows_stub, .{ .name = "roc_getppid", .linkage = .Strong });
+        @export(roc_getppid_windows_stub, .{ .name = "roc_getppid", .linkage = .strong });
     }
 }
 
-extern fn roc__mainForHost_1_exposed(i32) callconv(.C) i32;
+extern fn roc__main_for_host_1_exposed(i32) callconv(.C) i32;
 
 pub fn main() void {
     // const stdout = std.io.getStdOut().writer();
     const stderr = std.io.getStdErr().writer();
 
-    const exit_code = roc__mainForHost_1_exposed(0);
+    const exit_code = roc__main_for_host_1_exposed(0);
 
     if (exit_code != 0) {
         stderr.print("Exited with code {d}\n", .{exit_code}) catch unreachable;
@@ -115,7 +115,7 @@ pub fn main() void {
 
 // an example effect to provide to the platform
 // this is where roc will call back into the host
-export fn roc_fx_stdoutLine(msg: *RocStr) callconv(.C) void {
+export fn roc_fx_stdout_line(msg: *RocStr) callconv(.C) void {
     const stdout = std.io.getStdOut().writer();
     stdout.print("{s}\n", .{msg.asSlice()}) catch unreachable;
 }

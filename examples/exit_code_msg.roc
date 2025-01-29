@@ -3,8 +3,8 @@ app [main!] { pf: platform "../platform/main.roc" }
 import pf.Stdout
 
 main! : {} => Result {} _
-main! = \{} ->
+main! = |{}|
 
-    Stdout.line! "Roc loves Zig"
+    Stdout.line!("Roc loves Zig")
 
-    Err (Exit 99 "SOME MESSAGE")
+    Err(Exit(99, "SOME MESSAGE"))
