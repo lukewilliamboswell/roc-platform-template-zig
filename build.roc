@@ -1,17 +1,17 @@
-app [main] {
-    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.16.0/O00IPk-Krg_diNS2dVWlI0ZQP794Vctxzv0ha96mK0E.tar.br",
+app [main!] {
+    cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.19.0/Hj-J_zxz7V9YurCSTFcFdu6cQJie4guzsPMUi5kBYUk.tar.br",
 }
 
 import cli.Cmd
 import cli.Env
 
-main =
+main! = |_args|
 
-    { os, arch } = Env.platform!
+    { os, arch } = Env.platform!({})
 
-    roc = Env.var "ROC" |> Task.result! |> Result.withDefault "roc"
+    roc = Env.var!("ROC") ?? "roc"
 
-    buildStub! roc os
+    build_stub!(roc, os)?
 
     # Note we use ReleaseFast to disable the stack probe which causes issues on Intel Macs
     #
@@ -31,34 +31,35 @@ main =
     #        ...
     #    ld: symbol(s) not found for architecture x86_64
     # ```
-    Cmd.exec "zig" ["build", "-Doptimize=ReleaseFast"]
-    |> Task.mapErr! ErrBuildingZigHost
+    Cmd.exec!("zig", ["build", "-Doptimize=ReleaseFast"]) ? ErrBuildingZigHost
 
-    Cmd.exec "cp" ["-f", "zig-out/lib/libhost.a", "./platform/libhost.a"]
-    |> Task.mapErr! ErrCopyPrebuiltLegacyHost
+    Cmd.exec!("cp", ["-f", "zig-out/lib/libhost.a", "./platform/libhost.a"]) ? ErrCopyPrebuiltLegacyHost
 
-    buildSurgicalHost! roc os arch
+    build_surgical_host!(roc, os, arch)
 
-buildStub = \roc, os ->
+build_stub! = |roc, os|
     # zig will link these shared libraries to build a dynhost executable
     # which is used to build the surgical host
     when os is
         LINUX ->
-            Cmd.exec roc ["build", "--lib", "--output", "./platform/libapp.so", "./platform/stub.roc"]
-            |> Task.mapErr ErrBuildingStubDylibLinux
-        MACOS ->
-            Cmd.exec roc ["build", "--lib", "--output", "./platform/libapp.dylib", "./platform/stub.roc"]
-            |> Task.mapErr ErrBuildingStubDylibMacos
-        WINDOWS ->
-            Cmd.exec roc ["build", "--lib", "--output", "./platform/app.lib", "./platform/stub.roc"]
-            |> Task.mapErr ErrBuildingStubDylibWindows
-        OTHER osStr ->
-            crash "OS $(osStr) not supported, build.roc probably needs updating"
+            Cmd.exec!(roc, ["build", "--lib", "--output", "./platform/libapp.so", "./platform/stub.roc"]) ? ErrBuildingStubDylibLinux
 
-buildSurgicalHost = \roc, os, arch ->
-    if os == LINUX && arch == X64 then
+        MACOS ->
+            Cmd.exec!(roc, ["build", "--lib", "--output", "./platform/libapp.dylib", "./platform/stub.roc"]) ? ErrBuildingStubDylibMacos
+
+        WINDOWS ->
+            Cmd.exec!(roc, ["build", "--lib", "--output", "./platform/app.lib", "./platform/stub.roc"]) ? ErrBuildingStubDylibWindows
+
+        OTHER(os_str) ->
+            crash("OS ${os_str} not supported, build.roc probably needs updating")
+
+    Ok({})
+
+build_surgical_host! = |roc, os, arch|
+    if os == LINUX and arch == X64 then
         # prebuilt surgical hosts are only supported/used on linux-x64 for now
-        Cmd.exec roc ["preprocess-host", "zig-out/bin/dynhost", "./platform/main.roc", "./platform/libapp.so"]
-        |> Task.mapErr! ErrBuildingPrebuiltSurgicalHostLinuxX64
+        Cmd.exec!(roc, ["preprocess-host", "zig-out/bin/dynhost", "./platform/main.roc", "./platform/libapp.so"]) ? ErrBuildingPrebuiltSurgicalHostLinuxX64
+
+        Ok({})
     else
-        Task.ok {}
+        Ok({})

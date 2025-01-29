@@ -1,7 +1,5 @@
-hosted Effect
-    exposes [
-        stdoutLine!,
-    ]
-    imports []
+hosted [
+    stdout_line!,
+]
 
-stdoutLine! : Str => {}
+stdout_line! : Str => {}

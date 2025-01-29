@@ -40,6 +40,16 @@
         devShell = pkgs.mkShell {
           buildInputs = sharedInputs ++ darwinInputs ++ linuxInputs;
 
+          # Clear all problematic environment variables for Zig on macOS
+          shellHook = pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+            unset NIX_CFLAGS_COMPILE
+            unset NIX_CFLAGS_LINK
+            unset NIX_ENFORCE_PURITY
+            unset NIX_LDFLAGS
+            unset NIX_CXXSTDLIB_COMPILE
+            unset NIX_CXXSTDLIB_LINK
+          '';
+
           # nix does not store libs in /usr/lib or /lib
           # for libgcc_s.so.1
           NIX_LIBGCC_S_PATH =

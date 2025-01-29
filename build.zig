@@ -9,13 +9,12 @@ pub fn build(b: *std.Build) !void {
 
     const lib = b.addStaticLibrary(.{
         .name = "host",
-        .root_source_file = .{ .path = "host/main.zig" },
+        .root_source_file = b.path("host/main.zig"),
         .target = host_target,
         .optimize = optimize,
         .link_libc = true,
+        .pic = true,
     });
-
-    lib.force_pic = true;
 
     b.installArtifact(lib);
 
@@ -23,13 +22,13 @@ pub fn build(b: *std.Build) !void {
 
     const exe = b.addExecutable(.{
         .name = "dynhost",
-        .root_source_file = .{ .path = "host/main.zig" },
+        .root_source_file = b.path("host/main.zig"),
         .target = host_target,
         .optimize = optimize,
         .link_libc = true,
     });
 
-    exe.addLibraryPath(.{ .path = "platform/" });
+    exe.addLibraryPath(b.path("platform/"));
     exe.linkSystemLibrary("app");
 
     b.installArtifact(exe);

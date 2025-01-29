@@ -3,23 +3,23 @@ platform ""
     exposes [Stdout]
     packages {}
     imports []
-    provides [mainForHost!]
+    provides [main_for_host!]
 
 import Stdout
 
-mainForHost! : I32 => I32
-mainForHost! = \_ ->
-    result = main! {}
+main_for_host! : I32 => I32
+main_for_host! = |_|
+    when main!({}) is
 
-    when result is
-        Ok {} -> 0
-        Err (Exit code str) ->
-            if Str.isEmpty str then
+        Ok({}) -> 0
+
+        Err(Exit(code, str)) ->
+            if Str.is_empty(str) then
                 code
             else
-                Stdout.line! str
+                Stdout.line!(str)
                 code
 
-        Err other ->
-            Stdout.line! "Program exited early with error: $(Inspect.toStr other)"
+        Err(other) ->
+            Stdout.line!("Program exited early with error: ${Inspect.to_str(other)}")
             1
