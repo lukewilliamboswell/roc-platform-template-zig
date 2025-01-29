@@ -14,37 +14,24 @@ jobs:
       matrix:
         include:
           - operating-system: ubuntu-20.04
-            roc-archive: roc_nightly-linux_x86_64-latest.tar.gz
             package-manager: apt
           - operating-system: ubuntu-22.04
-            roc-archive: roc_nightly-linux_x86_64-latest.tar.gz
             package-manager: apt
           - operating-system: macos-13
-            roc-archive: roc_nightly-macos_x86_64-latest.tar.gz
             package-manager: brew
           - operating-system: macos-14
-            roc-archive: roc_nightly-macos_apple_silicon-latest.tar.gz
             package-manager: brew
     steps:
       - uses: actions/checkout@v3
       - uses: korandoru/setup-zig@v1
         with:
-          zig-version: 0.11.0
+          zig-version: 0.13.0
 
-      - name: fetch latest release
-        run: curl -fOL https://github.com/roc-lang/roc/releases/download/nightly/${{ matrix.roc-archive }}
-
-      - name: rename nightly tar
-        run: mv $(ls | grep "roc_nightly.*tar\.gz") roc_nightly.tar.gz
-
-      - name: decompress the tar
-        run: tar -xzf roc_nightly.tar.gz
-
-      - name: remove tar
-        run: rm roc_nightly.tar.gz
-
-      - name: simplify nightly folder name
-        run: mv roc_nightly* roc_nightly
+      - name: Install Roc
+        uses: hasnep/setup-roc@main
+        with:
+          roc-version: nightly
+          testing: auto
 
       - name: install expect for testing (Linux)
         if: runner.os == 'Linux'
@@ -54,11 +41,11 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install expect
 
+      - name: check the roc version
+        run: roc --version
+
       - name: check zig version
         run: zig version
-
-      - name: check roc version
-        run: ./roc_nightly/roc version
 
       - name: check expect version
         run: expect -v
@@ -69,7 +56,7 @@ jobs:
           ls -la
 
       - name: build the platform
-        run: ROC=./roc_nightly/roc ./roc_nightly/roc build.roc
+        run: roc build.roc
 
       - name: run the tests
-        run: ROC=./roc_nightly/roc EXAMPLES_DIR=./examples/ ./ci/all_tests.sh
+        run: ROC=roc EXAMPLES_DIR=./examples/ ./ci/all_tests.sh
