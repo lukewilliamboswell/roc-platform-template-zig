@@ -1,121 +1,154 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const str = @import("vendor/str.zig");
-const RocStr = str.RocStr;
-const RocResult = @import("result.zig").RocResult;
+
+const glue = @import("glue.zig");
+const RocStr = glue.RocStr;
+
+// the highest alignment of any primitive type
+// can we make this finer-grained, zig wants to
+// have a comptime constant for alignemnt
+const Align = @alignOf(u128);
+
+const PlatformEffects = glue.PlatformEffects;
+
 const testing = std.testing;
-const expectEqual = testing.expectEqual;
-const expect = testing.expect;
 
-const Align = 2 * @alignOf(usize);
-extern fn malloc(size: usize) callconv(.C) ?*align(Align) anyopaque;
-extern fn realloc(c_ptr: [*]align(Align) u8, size: usize) callconv(.C) ?*anyopaque;
-extern fn free(c_ptr: [*]align(Align) u8) callconv(.C) void;
-extern fn memcpy(dst: [*]u8, src: [*]u8, size: usize) callconv(.C) void;
-extern fn memset(dst: [*]u8, value: i32, size: usize) callconv(.C) void;
+fn roc_alloc(effects: *glue.PlatformEffects, requested_size: usize, alignment: u32) callconv(.C) ?*anyopaque {
+    _ = alignment;
+    const allocator: *std.mem.Allocator = @ptrCast(@alignCast(effects.data));
 
-const DEBUG: bool = false;
+    // we allocate extra bytes to store the size of the allocation
+    const ptr = allocator.alignedAlloc(u8, Align, requested_size + @sizeOf(usize)) catch return null;
+    @as(*usize, @ptrCast(ptr)).* = requested_size;
 
-export fn roc_alloc(size: usize, alignment: u32) callconv(.C) ?*anyopaque {
-    if (DEBUG) {
-        const ptr = malloc(size);
-        const stdout = std.io.getStdOut().writer();
-        stdout.print("alloc:   {d} (alignment {d}, size {d})\n", .{ ptr, alignment, size }) catch unreachable;
-        return ptr;
-    } else {
-        return malloc(size);
-    }
+    // we return a pointer to the location immediately after the size of the allocation
+    return @as([*]u8, @ptrCast(ptr)) + @sizeOf(usize);
 }
 
-export fn roc_realloc(c_ptr: *anyopaque, new_size: usize, old_size: usize, alignment: u32) callconv(.C) ?*anyopaque {
-    if (DEBUG) {
-        const stdout = std.io.getStdOut().writer();
-        stdout.print("realloc: {d} (alignment {d}, old_size {d})\n", .{ c_ptr, alignment, old_size }) catch unreachable;
-    }
-
-    return realloc(@as([*]align(Align) u8, @alignCast(@ptrCast(c_ptr))), new_size);
+fn roc_realloc(effects: *glue.PlatformEffects, c_ptr: *anyopaque, new_size: usize, old_size: usize, alignment: u32) callconv(.C) ?*anyopaque {
+    _ = alignment;
+    const allocator: *std.mem.Allocator = @ptrCast(@alignCast(effects.data));
+    const ptr = @as([*]align(Align) u8, @alignCast(@ptrCast(c_ptr))) - @sizeOf(usize);
+    return (allocator.realloc(ptr[0 .. old_size + @sizeOf(usize)], new_size + @sizeOf(usize)) catch return null).ptr;
 }
 
-export fn roc_dealloc(c_ptr: *anyopaque, alignment: u32) callconv(.C) void {
-    if (DEBUG) {
-        const stdout = std.io.getStdOut().writer();
-        stdout.print("dealloc: {d} (alignment {d})\n", .{ c_ptr, alignment }) catch unreachable;
-    }
-
-    free(@as([*]align(Align) u8, @alignCast(@ptrCast(c_ptr))));
+fn roc_dealloc(effects: *glue.PlatformEffects, c_ptr: *anyopaque, alignment: u32) callconv(.C) void {
+    _ = alignment;
+    const allocator: *std.mem.Allocator = @ptrCast(@alignCast(effects.data));
+    const ptr = @as([*]align(Align) u8, @alignCast(@ptrCast(c_ptr))) - @sizeOf(usize);
+    const size = @as(*usize, @ptrCast(ptr)).*;
+    allocator.free(ptr[0 .. size + @sizeOf(usize)]);
 }
 
-export fn roc_panic(msg: *RocStr, tag_id: u32) callconv(.C) void {
-    const stderr = std.io.getStdErr().writer();
+fn roc_panic(_: *PlatformEffects, msg: *RocStr, tag_id: u32) callconv(.C) void {
     switch (tag_id) {
         0 => {
-            stderr.print("Roc standard library crashed with message\n\n    {s}\n\nShutting down\n", .{msg.asSlice()}) catch unreachable;
+            std.log.err(
+                "Roc standard library crashed with message\n\n    {s}\n\nShutting down\n",
+                .{msg.asSlice()},
+            );
+            std.process.exit(1);
         },
         1 => {
-            stderr.print("Application crashed with message\n\n    {s}\n\nShutting down\n", .{msg.asSlice()}) catch unreachable;
+            std.log.err(
+                "Application crashed with message\n\n    {s}\n\nShutting down\n",
+                .{msg.asSlice()},
+            );
+            std.process.exit(1);
         },
         else => unreachable,
     }
-    std.process.exit(1);
 }
 
-export fn roc_dbg(loc: *RocStr, msg: *RocStr, src: *RocStr) callconv(.C) void {
-    const stderr = std.io.getStdErr().writer();
-    stderr.print("[{s}] {s} = {s}\n", .{ loc.asSlice(), src.asSlice(), msg.asSlice() }) catch unreachable;
+fn roc_dbg(_: *PlatformEffects, loc: *RocStr, msg: *RocStr, src: *RocStr) callconv(.C) void {
+    std.log.debug(
+        "[{s}] {s} = {s}\n",
+        .{
+            loc.asSlice(),
+            src.asSlice(),
+            msg.asSlice(),
+        },
+    );
 }
 
-export fn roc_memset(dst: [*]u8, value: i32, size: usize) callconv(.C) void {
-    return memset(dst, value, size);
+// TODO
+fn roc_expect_failed(_: *PlatformEffects, loc: *RocStr, src: *RocStr, variables: *anyopaque) callconv(.C) void {
+    _ = loc;
+    _ = src;
+
+    // TODO take in a list of variables {name, value} and print them
+    _ = variables;
+
+    std.log.err("A roc `expect` failed somewhere...\n", .{});
 }
-
-extern fn kill(pid: c_int, sig: c_int) c_int;
-extern fn shm_open(name: *const i8, oflag: c_int, mode: c_uint) c_int;
-extern fn mmap(addr: ?*anyopaque, length: c_uint, prot: c_int, flags: c_int, fd: c_int, offset: c_uint) *anyopaque;
-extern fn getppid() c_int;
-
-fn roc_getppid() callconv(.C) c_int {
-    return getppid();
-}
-
-fn roc_getppid_windows_stub() callconv(.C) c_int {
-    return 0;
-}
-
-fn roc_shm_open(name: *const i8, oflag: c_int, mode: c_uint) callconv(.C) c_int {
-    return shm_open(name, oflag, mode);
-}
-fn roc_mmap(addr: ?*anyopaque, length: c_uint, prot: c_int, flags: c_int, fd: c_int, offset: c_uint) callconv(.C) *anyopaque {
-    return mmap(addr, length, prot, flags, fd, offset);
-}
-
-comptime {
-    if (builtin.os.tag == .macos or builtin.os.tag == .linux) {
-        @export(roc_getppid, .{ .name = "roc_getppid", .linkage = .strong });
-        @export(roc_mmap, .{ .name = "roc_mmap", .linkage = .strong });
-        @export(roc_shm_open, .{ .name = "roc_shm_open", .linkage = .strong });
-    }
-
-    if (builtin.os.tag == .windows) {
-        @export(roc_getppid_windows_stub, .{ .name = "roc_getppid", .linkage = .strong });
-    }
-}
-
-extern fn roc__main_for_host_1_exposed(i32) callconv(.C) i32;
 
 pub fn main() void {
-    // const stdout = std.io.getStdOut().writer();
-    const stderr = std.io.getStdErr().writer();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        const deinit_status = gpa.deinit();
+        //fail test; can't try in defer as defer is executed after we return
+        if (deinit_status == .leak) testing.expect(false) catch @panic("TEST FAIL");
+    }
+    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    defer arena.deinit();
+    var allocator = arena.allocator();
 
-    const exit_code = roc__main_for_host_1_exposed(0);
+    // our return value to be populated by roc main_for_host!
+    var exit_code: i32 = -1;
+
+    // the allocators, and
+    const platform_effects = glue.PlatformEffects{
+        .data = &allocator,
+        .roc_alloc = &roc_alloc,
+        .roc_realloc = &roc_realloc,
+        .roc_dealloc = &roc_dealloc,
+        .roc_panic = &roc_panic,
+        .roc_dbg = &roc_dbg,
+        .roc_expect_failed = &roc_expect_failed,
+        .stdout_line = &stdout_line,
+        .stdin_line = &stdin_line,
+    };
+
+    const arg: i32 = 0;
+
+    glue.roc__main_for_host(
+        &platform_effects,
+        &exit_code,
+        &arg,
+    );
 
     if (exit_code != 0) {
-        stderr.print("Exited with code {d}\n", .{exit_code}) catch unreachable;
+        std.log.info("Exited with code {d}\n", .{exit_code});
     }
 }
 
 // an example effect to provide to the platform
 // this is where roc will call back into the host
-export fn roc_fx_stdout_line(msg: *RocStr) callconv(.C) void {
+fn stdout_line(_: *PlatformEffects, msg: *RocStr) callconv(.C) void {
     const stdout = std.io.getStdOut().writer();
+
+    // TODO handle STDIO errors here
     stdout.print("{s}\n", .{msg.asSlice()}) catch unreachable;
 }
+
+fn stdin_line(effects: *PlatformEffects, out: *RocStr) callconv(.C) void {
+    const stdin = std.io.getStdIn().reader();
+
+    const allocator: *std.mem.Allocator = @ptrCast(@alignCast(effects.data));
+    const MAX_SIZE = std.math.maxInt(usize);
+    const buf = stdin.readUntilDelimiterOrEofAlloc(allocator.*, '\n', MAX_SIZE) catch {
+        @panic("Failed to read from STDIN\n");
+    };
+
+    if (buf) |data| {
+        out.* = RocStr.fromSlice(effects, data);
+    } else {
+        out.* = RocStr.empty;
+    }
+}
+
+// host/main.zig:138:38: error: expected type '[]const u8', found '?[]u8'
+//     out = &RocStr.fromSlice(effects, buf);
+//                                      ^~~
+// host/glue.zig:52:62: note: parameter type declared here
+//     pub fn fromSlice(effects: *const PlatformEffects, slice: []const u8) RocStr {
