@@ -1,7 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
-
+const testing = std.testing;
 const glue = @import("glue.zig");
+
 const RocStr = glue.RocStr;
 
 // the highest alignment of any primitive type
@@ -11,7 +12,58 @@ const Align = @alignOf(u128);
 
 const PlatformEffects = glue.PlatformEffects;
 
-const testing = std.testing;
+// the host implementation... calls into roc using the platform API
+// `roc__init_for_host` and `roc__run_for_host`
+pub fn main() void {
+
+    // let's use an AreaAllocator as an example
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        const deinit_status = gpa.deinit();
+        //fail test; can't try in defer as defer is executed after we return
+        if (deinit_status == .leak) testing.expect(false) catch @panic("TEST FAIL");
+    }
+    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    defer arena.deinit();
+    var allocator = arena.allocator();
+
+    // We will be passing in function pointers for everything, instead of
+    // the old roc double linking shenanigans
+    const platform_effects = glue.PlatformEffects{
+        .data = &allocator,
+        .roc_alloc = &roc_alloc,
+        .roc_realloc = &roc_realloc,
+        .roc_dealloc = &roc_dealloc,
+        .roc_panic = &roc_panic,
+        .roc_dbg = &roc_dbg,
+        .roc_expect_failed = &roc_expect_failed,
+        .stdout_line = &stdout_line,
+        .stdin_line = &stdin_line,
+    };
+
+    // Intermediate state returned from init.
+    var state: RocStr = RocStr.empty;
+
+    // call into roc
+    glue.roc__init_for_host(
+        &platform_effects,
+        &state,
+    );
+
+    // Overall return value from run.
+    var exit_code: i32 = -1;
+
+    // call into roc
+    glue.roc__run_for_host(
+        &platform_effects,
+        &exit_code,
+        &state,
+    );
+
+    if (exit_code != 0) {
+        std.log.info("Exited with code {d}\n", .{exit_code});
+    }
+}
 
 fn roc_alloc(effects: *glue.PlatformEffects, requested_size: usize, alignment: u32) callconv(.C) ?*anyopaque {
     _ = alignment;
@@ -82,52 +134,6 @@ fn roc_expect_failed(_: *PlatformEffects, loc: *RocStr, src: *RocStr, variables:
     std.log.err("A roc `expect` failed somewhere...\n", .{});
 }
 
-pub fn main() void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer {
-        const deinit_status = gpa.deinit();
-        //fail test; can't try in defer as defer is executed after we return
-        if (deinit_status == .leak) testing.expect(false) catch @panic("TEST FAIL");
-    }
-    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
-    defer arena.deinit();
-    var allocator = arena.allocator();
-
-    // the allocators, and
-    const platform_effects = glue.PlatformEffects{
-        .data = &allocator,
-        .roc_alloc = &roc_alloc,
-        .roc_realloc = &roc_realloc,
-        .roc_dealloc = &roc_dealloc,
-        .roc_panic = &roc_panic,
-        .roc_dbg = &roc_dbg,
-        .roc_expect_failed = &roc_expect_failed,
-        .stdout_line = &stdout_line,
-        .stdin_line = &stdin_line,
-    };
-
-    // Intermediate state returned from init.
-    var state: RocStr = RocStr.empty;
-
-    glue.roc__init_for_host(
-        &platform_effects,
-        &state,
-    );
-
-    // Overall return value from run.
-    var exit_code: i32 = -1;
-
-    glue.roc__run_for_host(
-        &platform_effects,
-        &exit_code,
-        &state,
-    );
-
-    if (exit_code != 0) {
-        std.log.info("Exited with code {d}\n", .{exit_code});
-    }
-}
-
 // an example effect to provide to the platform
 // this is where roc will call back into the host
 fn stdout_line(_: *PlatformEffects, msg: *RocStr) callconv(.C) void {
@@ -152,9 +158,3 @@ fn stdin_line(effects: *PlatformEffects, out: *RocStr) callconv(.C) void {
         out.* = RocStr.empty;
     }
 }
-
-// host/main.zig:138:38: error: expected type '[]const u8', found '?[]u8'
-//     out = &RocStr.fromSlice(effects, buf);
-//                                      ^~~
-// host/glue.zig:52:62: note: parameter type declared here
-//     pub fn fromSlice(effects: *const PlatformEffects, slice: []const u8) RocStr {
