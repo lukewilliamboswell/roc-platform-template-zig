@@ -30,7 +30,6 @@ pub const RocStr = extern struct {
         return slice.*;
     }
 
-
     pub fn isSmallStr(self: RocStr) bool {
         return @as(isize, @bitCast(self.capacity_or_alloc_ptr)) < 0;
     }
@@ -88,7 +87,6 @@ pub const RocStr = extern struct {
             .capacity_or_alloc_ptr = 0,
         };
     }
-
 };
 
 pub fn utils_increfRcPtrC(ptr_to_refcount: *isize, amount: isize) callconv(.C) void {
@@ -154,19 +152,18 @@ export fn roc__str_ptr(out: *?[*]const u8, str: *RocStr) void {
 }
 
 export fn roc__str_new(effects: *PlatformEffects, out: *RocStr, data: [*]const u8, len: *const u64) void {
-
     _ = data;
 
-    const len_usize: usize =@intCast(len.*);
+    const len_usize: usize = @intCast(len.*);
     const ptr = effects.*.roc_alloc(effects, @as(usize, len.*), 1);
     if (ptr) |bytes| {
-       out.*.bytes = @ptrCast(bytes);
-       out.*.length = len_usize;
-       out.*.capacity_or_alloc_ptr = len_usize;
+        out.*.bytes = @ptrCast(bytes);
+        out.*.length = len_usize;
+        out.*.capacity_or_alloc_ptr = len_usize;
     } else {
         // TODO: fill in panic call.
         var msg = RocStr.fromSlice(PANIC_MSG);
-       effects.*.roc_panic(effects, &msg, 0);
+        effects.*.roc_panic(effects, &msg, 0);
     }
 }
 
@@ -217,12 +214,13 @@ pub const PlatformEffects = extern struct {
 };
 
 export fn roc__init_for_host(_: *PlatformEffects, out: *RocStr) callconv(.C) void {
+    std.log.info("running roc__init_for_host", .{});
     const str = RocStr.fromSlice("Hello");
     out.* = str;
 }
 
-export fn roc__run_for_host(effects: *PlatformEffects,out: *i32,state: *RocStr) callconv(.C) void {
-    std.log.info("Running Roc APP", .{});
+export fn roc__run_for_host(effects: *PlatformEffects, out: *i32, state: *RocStr) callconv(.C) void {
+    std.log.info("running roc__run_for_host", .{});
     effects.*.stdout_line(effects, state);
     out.* = 0;
 }
