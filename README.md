@@ -4,7 +4,7 @@ This is an exploration for the new design for calling into roc.
 ## Demo
 
 ```sh
-$ zig build-exe app.o libmain.a
+$ zig build-obj host/app.zig
 $ zig build-lib host/main.zig
 $ zig build-exe app.o libmain.a
 $ ./app
