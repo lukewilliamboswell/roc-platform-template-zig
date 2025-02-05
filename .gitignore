@@ -1,40 +1,10 @@
-generated-docs/
-
-examples/hello
-examples/exit_code_msg
-examples/exit_tag
-
-build
-app
-
 *.a
-*.tar.br
-*.tar.gz
-*.ll
-*.lib
+*.o
 *.dylib
 *.so
-*.lib
-*.o
-*.rh
-*.rm
-
-host/libhost.h
-
-zig-cache/
-zig-out/
-build
-app
 
 .DS_Store
 
-# ingore things that are WIP
-wip-*
-
 .zig-cache/
-platform/dynhost
 
-# ignore the libapp that is built when making a dynhost
-libapp
-
-main
+app
