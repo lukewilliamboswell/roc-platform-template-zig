@@ -93,9 +93,6 @@ pub fn main() void {
     defer arena.deinit();
     var allocator = arena.allocator();
 
-    // our return value to be populated by roc main_for_host!
-    var exit_code: i32 = -1;
-
     // the allocators, and
     const platform_effects = glue.PlatformEffects{
         .data = &allocator,
@@ -109,12 +106,21 @@ pub fn main() void {
         .stdin_line = &stdin_line,
     };
 
-    const arg: i32 = 0;
+    // Intermediate state returned from init.
+    var state: RocStr = RocStr.empty;
 
-    glue.roc__main_for_host(
+    glue.roc__init_for_host(
+        &platform_effects,
+        &state,
+    );
+
+    // Overall return value from run.
+    var exit_code: i32 = -1;
+
+    glue.roc__run_for_host(
         &platform_effects,
         &exit_code,
-        &arg,
+        &state,
     );
 
     if (exit_code != 0) {
