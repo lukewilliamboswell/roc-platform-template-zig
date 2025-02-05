@@ -5,9 +5,9 @@ set -euo pipefail
 
 rm -rf app.o libmain.a app
 
-zig build-obj host/app.zig
-zig build-lib host/main.zig
-zig build-exe app.o libmain.a
+zig build-obj -O ReleaseFast host/app.zig
+zig build-lib -O ReleaseFast host/main.zig
+zig build-exe -fstrip app.o libmain.a
 
 ls -hl ./app
 
