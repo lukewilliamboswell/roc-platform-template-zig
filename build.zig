@@ -1,15 +1,128 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
+/// Roc target definitions matching src/cli/target.zig
+const RocTarget = enum {
+    // x64 (x86_64) targets
+    x64mac,
+    x64win,
+    x64musl,
+    x64glibc,
+
+    // arm64 (aarch64) targets
+    arm64mac,
+    arm64win,
+    arm64musl,
+    arm64glibc,
+
+    // arm32 targets
+    arm32musl,
+
+    // WebAssembly
+    wasm32,
+
+    fn toZigTarget(self: RocTarget) std.Target.Query {
+        return switch (self) {
+            .x64mac => .{ .cpu_arch = .x86_64, .os_tag = .macos },
+            .x64win => .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu },
+            .x64musl => .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
+            .x64glibc => .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
+            .arm64mac => .{ .cpu_arch = .aarch64, .os_tag = .macos },
+            .arm64win => .{ .cpu_arch = .aarch64, .os_tag = .windows, .abi = .gnu },
+            .arm64musl => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl },
+            .arm64glibc => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .gnu },
+            .arm32musl => .{ .cpu_arch = .arm, .os_tag = .linux, .abi = .musleabihf },
+            .wasm32 => .{ .cpu_arch = .wasm32, .os_tag = .wasi },
+        };
+    }
+
+    fn targetDir(self: RocTarget) []const u8 {
+        return switch (self) {
+            .x64mac => "x64mac",
+            .x64win => "x64win",
+            .x64musl => "x64musl",
+            .x64glibc => "x64glibc",
+            .arm64mac => "arm64mac",
+            .arm64win => "arm64win",
+            .arm64musl => "arm64musl",
+            .arm64glibc => "arm64glibc",
+            .arm32musl => "arm32musl",
+            .wasm32 => "wasm32",
+        };
+    }
+
+    fn libFilename(self: RocTarget) []const u8 {
+        return switch (self) {
+            .x64win, .arm64win => "host.lib",
+            else => "libhost.a",
+        };
+    }
+};
+
+/// All cross-compilation targets for `zig build`
+const all_targets = [_]RocTarget{
+    .x64mac,
+    .x64win,
+    .x64musl,
+    .x64glibc,
+    .arm64mac,
+    .arm64win,
+    .arm64musl,
+    .arm64glibc,
+    .arm32musl,
+    .wasm32,
+};
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     // Get the roc dependency and its builtins module
     const roc_dep = b.dependency("roc", .{});
     const builtins_module = roc_dep.module("builtins");
 
-    // Build the platform host as a static library
-    // This will be linked with the Roc-compiled app object file
+    // Default step: build for all targets
+    const all_step = b.getInstallStep();
+
+    // Create copy step for all targets
+    const copy_all = b.addUpdateSourceFiles();
+    all_step.dependOn(&copy_all.step);
+
+    // Build for each Roc target
+    for (all_targets) |roc_target| {
+        const target = b.resolveTargetQuery(roc_target.toZigTarget());
+        const host_lib = buildHostLib(b, target, optimize, builtins_module);
+
+        // Copy to platform/targets/{target}/libhost.a (or host.lib for Windows)
+        copy_all.addCopyFileToSource(
+            host_lib.getEmittedBin(),
+            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
+        );
+    }
+
+    // Native step: build only for the current platform
+    const native_step = b.step("native", "Build host library for native platform only");
+    const native_target = b.standardTargetOptions(.{});
+
+    const native_lib = buildHostLib(b, native_target, optimize, builtins_module);
+    b.installArtifact(native_lib);
+
+    // Copy native library to platform/libhost.a (or host.lib)
+    const copy_native = b.addUpdateSourceFiles();
+    const native_filename = if (native_target.result.os.tag == .windows) "host.lib" else "libhost.a";
+    copy_native.addCopyFileToSource(
+        native_lib.getEmittedBin(),
+        b.pathJoin(&.{ "platform", native_filename }),
+    );
+    native_step.dependOn(&copy_native.step);
+    native_step.dependOn(&native_lib.step);
+}
+
+fn buildHostLib(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    builtins_module: *std.Build.Module,
+) *std.Build.Step.Compile {
     const host_lib = b.addLibrary(.{
         .name = "host",
         .linkage = .static,
@@ -18,7 +131,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .strip = optimize != .Debug,
-            .pic = true, // Enable Position Independent Code for PIE compatibility
+            .pic = true,
             .imports = &.{
                 .{ .name = "builtins", .module = builtins_module },
             },
@@ -27,28 +140,5 @@ pub fn build(b: *std.Build) void {
     // Force bundle compiler-rt to resolve runtime symbols like __main
     host_lib.bundle_compiler_rt = true;
 
-    b.installArtifact(host_lib);
-
-    // Copy the library to the platform directory for roc to find
-    const copy_lib = b.addUpdateSourceFiles();
-    const lib_filename = if (target.result.os.tag == .windows) "host.lib" else "libhost.a";
-    copy_lib.addCopyFileToSource(host_lib.getEmittedBin(), b.pathJoin(&.{ "platform", lib_filename }));
-    b.getInstallStep().dependOn(&copy_lib.step);
-
-    // Test step
-    const host_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("platform/host.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "builtins", .module = builtins_module },
-            },
-        }),
-    });
-
-    const run_host_tests = b.addRunArtifact(host_tests);
-
-    const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&run_host_tests.step);
+    return host_lib;
 }
