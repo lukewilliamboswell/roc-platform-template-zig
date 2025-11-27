@@ -1,25 +1,12 @@
 platform ""
-    requires {} { main! : {} => Result {} [Exit I32 Str]_ }
-    exposes [Stdout]
+    requires {} { main! : () => {} }
+    exposes [Stdout, Stderr, Stdin]
     packages {}
-    imports []
-    provides [main_for_host!]
+    provides { main_for_host! }
 
 import Stdout
+import Stderr
+import Stdin
 
-main_for_host! : I32 => I32
-main_for_host! = |_|
-    when main!({}) is
-
-        Ok({}) -> 0
-
-        Err(Exit(code, str)) ->
-            if Str.is_empty(str) then
-                code
-            else
-                Stdout.line!(str)
-                code
-
-        Err(other) ->
-            Stdout.line!("Program exited early with error: ${Inspect.to_str(other)}")
-            1
+main_for_host! : () => {}
+main_for_host! = main!
