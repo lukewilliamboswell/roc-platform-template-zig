@@ -141,9 +141,7 @@ fn __main() callconv(.c) void {}
 
 // C compatible main for runtime
 fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
-    _ = argc;
-    _ = argv;
-    platform_main() catch |err| {
+    return platform_main(@intCast(argc), argv) catch |err| {
         const stderr: std.fs.File = .stderr();
         var buf: [256]u8 = undefined;
         var w = stderr.writer(&buf);
@@ -151,11 +149,11 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
         w.interface.flush() catch {};
         return 1;
     };
-    return 0;
 }
 
-// Use the actual RocStr from builtins instead of defining our own
+// Use the actual types from builtins
 const RocStr = builtins.str.RocStr;
+const RocList = builtins.list.RocList;
 
 /// Hosted function: Stderr.line! (index 0 - sorted alphabetically)
 /// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
@@ -252,7 +250,7 @@ const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
 };
 
 /// Platform host entrypoint
-fn platform_main() !void {
+fn platform_main(argc: usize, argv: [*][*:0]u8) !c_int {
     var host_env = HostEnv{
         .gpa = std.heap.GeneralPurposeAllocator(.{}){},
     };
@@ -278,13 +276,45 @@ fn platform_main() !void {
         },
     };
 
-    // Call the app's main! entrypoint
-    var ret: [0]u8 = undefined; // Result is {} which is zero-sized
-    var args: [0]u8 = undefined;
-    // Note: although this is a function with no args and a zero-sized return value,
-    // we can't currently pass null pointers for either of these because Roc will
-    // currently dereference both of these eagerly even though it won't use either,
-    // causing a segfault if you pass null. This should be changed! Dereferencing
-    // garbage memory is obviously pointless, and there's no reason we should do it.
-    roc__main_for_host(&roc_ops, @as(*anyopaque, @ptrCast(&ret)), @as(*anyopaque, @ptrCast(&args)));
+    // Build List(Str) from argc/argv
+    var args_list = buildStrArgsList(argc, argv, &roc_ops);
+
+    // Call the app's main! entrypoint - returns I32 exit code
+    var exit_code: i32 = undefined;
+    roc__main_for_host(&roc_ops, @as(*anyopaque, @ptrCast(&exit_code)), @as(*anyopaque, @ptrCast(&args_list)));
+
+    return exit_code;
+}
+
+/// Build a RocList of RocStr from argc/argv
+fn buildStrArgsList(argc: usize, argv: [*][*:0]u8, roc_ops: *builtins.host_abi.RocOps) RocList {
+    if (argc == 0) {
+        return RocList.empty();
+    }
+
+    // Allocate array for RocStr elements
+    const args_size = argc * @sizeOf(RocStr);
+    var alloc_args = builtins.host_abi.RocAlloc{
+        .alignment = @alignOf(RocStr),
+        .length = args_size,
+        .answer = undefined,
+    };
+    roc_ops.roc_alloc(&alloc_args, roc_ops.env);
+
+    const args_ptr: [*]RocStr = @ptrCast(@alignCast(alloc_args.answer));
+
+    // Build each argument string
+    for (0..argc) |i| {
+        const arg_cstr = argv[i];
+        const arg_len = std.mem.len(arg_cstr);
+
+        // RocStr.init takes a const pointer to read FROM and allocates internally
+        args_ptr[i] = RocStr.init(arg_cstr, arg_len, roc_ops);
+    }
+
+    return RocList{
+        .bytes = @ptrCast(args_ptr),
+        .length = argc,
+        .capacity_or_alloc_ptr = argc,
+    };
 }
