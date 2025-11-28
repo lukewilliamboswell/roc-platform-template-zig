@@ -277,11 +277,12 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) !c_int {
     };
 
     // Build List(Str) from argc/argv
-    var args_list = buildStrArgsList(argc, argv, &roc_ops);
+    const args_list = buildStrArgsList(argc, argv, &roc_ops);
 
     // Call the app's main! entrypoint - returns I32 exit code
+    // Roc will take ownership and decref the args
     var exit_code: i32 = undefined;
-    roc__main_for_host(&roc_ops, @as(*anyopaque, @ptrCast(&exit_code)), @as(*anyopaque, @ptrCast(&args_list)));
+    roc__main_for_host(&roc_ops, @as(*anyopaque, @ptrCast(&exit_code)), @as(*anyopaque, @ptrCast(@constCast(&args_list))));
 
     return exit_code;
 }
@@ -292,16 +293,16 @@ fn buildStrArgsList(argc: usize, argv: [*][*:0]u8, roc_ops: *builtins.host_abi.R
         return RocList.empty();
     }
 
-    // Allocate array for RocStr elements
-    const args_size = argc * @sizeOf(RocStr);
-    var alloc_args = builtins.host_abi.RocAlloc{
-        .alignment = @alignOf(RocStr),
-        .length = args_size,
-        .answer = undefined,
-    };
-    roc_ops.roc_alloc(&alloc_args, roc_ops.env);
+    // Allocate list with proper refcount header using RocList.allocateExact
+    const args_list = RocList.allocateExact(
+        @alignOf(RocStr),
+        argc,
+        @sizeOf(RocStr),
+        true, // elements are refcounted (RocStr)
+        roc_ops,
+    );
 
-    const args_ptr: [*]RocStr = @ptrCast(@alignCast(alloc_args.answer));
+    const args_ptr: [*]RocStr = @ptrCast(@alignCast(args_list.bytes));
 
     // Build each argument string
     for (0..argc) |i| {
@@ -312,9 +313,5 @@ fn buildStrArgsList(argc: usize, argv: [*][*:0]u8, roc_ops: *builtins.host_abi.R
         args_ptr[i] = RocStr.init(arg_cstr, arg_len, roc_ops);
     }
 
-    return RocList{
-        .bytes = @ptrCast(args_ptr),
-        .length = argc,
-        .capacity_or_alloc_ptr = argc,
-    };
+    return args_list;
 }
