@@ -22,7 +22,9 @@ fn rocAllocFn(roc_alloc: *builtins.host_abi.RocAlloc, env: *anyopaque) callconv(
     const result = allocator.rawAlloc(total_size, align_enum, @returnAddress());
 
     const base_ptr = result orelse {
-        @panic("Host allocation failed");
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll("\x1b[31mHost error:\x1b[0m allocation failed, out of memory\n") catch {};
+        std.process.exit(1);
     };
 
     // Store the total size (including metadata) right before the user data
@@ -78,7 +80,9 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
     // Perform reallocation
     const old_slice = @as([*]u8, @ptrCast(old_base_ptr))[0..old_total_size];
     const new_slice = allocator.realloc(old_slice, new_total_size) catch {
-        @panic("Host reallocation failed");
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll("\x1b[31mHost error:\x1b[0m reallocation failed, out of memory\n") catch {};
+        std.process.exit(1);
     };
 
     // Store the new total size in the metadata
@@ -93,7 +97,7 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
 fn rocDbgFn(roc_dbg: *const builtins.host_abi.RocDbg, env: *anyopaque) callconv(.c) void {
     _ = env;
     const message = roc_dbg.utf8_bytes[0..roc_dbg.len];
-    std.debug.print("ROC DBG: {s}\n", .{message});
+    std.debug.print("\x1b[33mRoc dbg:\x1b[0m {s}\n", .{message});
 }
 
 /// Roc expect failed function
@@ -101,14 +105,18 @@ fn rocExpectFailedFn(roc_expect: *const builtins.host_abi.RocExpectFailed, env: 
     _ = env;
     const source_bytes = roc_expect.utf8_bytes[0..roc_expect.len];
     const trimmed = std.mem.trim(u8, source_bytes, " \t\n\r");
-    std.debug.print("Expect failed: {s}\n", .{trimmed});
+    std.debug.print("\x1b[33mExpect failed:\x1b[0m {s}\n", .{trimmed});
 }
 
 /// Roc crashed function
 fn rocCrashedFn(roc_crashed: *const builtins.host_abi.RocCrashed, env: *anyopaque) callconv(.c) noreturn {
     _ = env;
     const message = roc_crashed.utf8_bytes[0..roc_crashed.len];
-    std.fs.File.stderr().deprecatedWriter().print("\n\x1b[31mRoc crashed:\x1b[0m {s}\n", .{message}) catch {};
+    const stderr: std.fs.File = .stderr();
+    var buf: [256]u8 = undefined;
+    var w = stderr.writer(&buf);
+    w.interface.print("\n\x1b[31mRoc crashed:\x1b[0m {s}\n", .{message}) catch {};
+    w.interface.flush() catch {};
     std.process.exit(1);
 }
 
@@ -136,7 +144,11 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
     _ = argc;
     _ = argv;
     platform_main() catch |err| {
-        std.fs.File.stderr().deprecatedWriter().print("HOST ERROR: {s}\n", .{@errorName(err)}) catch unreachable;
+        const stderr: std.fs.File = .stderr();
+        var buf: [256]u8 = undefined;
+        var w = stderr.writer(&buf);
+        w.interface.print("\x1b[31mHost error:\x1b[0m {s}\n", .{@errorName(err)}) catch {};
+        w.interface.flush() catch {};
         return 1;
     };
     return 0;
@@ -157,7 +169,9 @@ fn hostedStderrLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
     const args: *Args = @ptrCast(@alignCast(args_ptr));
 
     const message = args.str.asSlice();
-    std.fs.File.stderr().deprecatedWriter().print("{s}\n", .{message}) catch unreachable;
+    const stderr: std.fs.File = .stderr();
+    stderr.writeAll(message) catch {};
+    stderr.writeAll("\n") catch {};
 }
 
 /// Hosted function: Stdin.line! (index 1 - sorted alphabetically)
@@ -166,13 +180,9 @@ fn hostedStderrLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
 fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = args_ptr; // Argument is {} which is zero-sized
 
-    // Get allocator from environment
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-    const allocator = host.gpa.allocator();
-
     // Read a line from stdin
     var buffer: [4096]u8 = undefined;
-    const stdin_file = std.fs.File.stdin();
+    const stdin_file: std.fs.File = .stdin();
     const bytes_read = stdin_file.read(&buffer) catch {
         // Return empty string on error
         const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
@@ -180,23 +190,40 @@ fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr
         return;
     };
 
-    // Find newline and trim it
+    // Handle EOF (no bytes read)
+    if (bytes_read == 0) {
+        const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
+        result.* = RocStr.empty();
+        return;
+    }
+
+    // Find newline and trim it (handle both \n and \r\n)
     const line_with_newline = buffer[0..bytes_read];
-    const line = if (std.mem.indexOfScalar(u8, line_with_newline, '\n')) |newline_idx|
+    var line = if (std.mem.indexOfScalar(u8, line_with_newline, '\n')) |newline_idx|
         line_with_newline[0..newline_idx]
     else
         line_with_newline;
 
-    // Allocate and copy the line
-    const line_copy = allocator.dupe(u8, line) catch {
-        const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
-        result.* = RocStr.empty();
-        return;
+    // Also trim trailing \r for Windows line endings
+    if (line.len > 0 and line[line.len - 1] == '\r') {
+        line = line[0 .. line.len - 1];
+    }
+
+    // Allocate through Roc's allocation system to ensure proper size-tracking metadata
+    var roc_alloc_args = builtins.host_abi.RocAlloc{
+        .alignment = 1,
+        .length = line.len,
+        .answer = undefined,
     };
+    ops.roc_alloc(&roc_alloc_args, ops.env);
+
+    // Copy line data to the Roc-allocated memory
+    const line_copy: [*]u8 = @ptrCast(roc_alloc_args.answer);
+    @memcpy(line_copy[0..line.len], line);
 
     // Create RocStr from the read line and return it
     const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
-    result.* = RocStr.init(line_copy.ptr, line_copy.len, ops);
+    result.* = RocStr.init(line_copy, line.len, ops);
 }
 
 /// Hosted function: Stdout.line! (index 2 - sorted alphabetically)
@@ -211,7 +238,9 @@ fn hostedStdoutLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
     const args: *Args = @ptrCast(@alignCast(args_ptr));
 
     const message = args.str.asSlice();
-    std.fs.File.stdout().deprecatedWriter().print("{s}\n", .{message}) catch unreachable;
+    const stdout: std.fs.File = .stdout();
+    stdout.writeAll(message) catch {};
+    stdout.writeAll("\n") catch {};
 }
 
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name
@@ -230,7 +259,7 @@ fn platform_main() !void {
     defer {
         const leaked = host_env.gpa.deinit();
         if (leaked == .leak) {
-            std.debug.print("Memory leak detected!\n", .{});
+            std.debug.print("\x1b[33mMemory leak detected!\x1b[0m\n", .{});
         }
     }
 
