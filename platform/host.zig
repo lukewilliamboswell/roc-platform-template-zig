@@ -33,10 +33,14 @@ fn rocAllocFn(roc_alloc: *builtins.host_abi.RocAlloc, env: *anyopaque) callconv(
 
     // Return pointer to the user data (after the size metadata)
     roc_alloc.answer = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
+
+    std.debug.print("[ALLOC] ptr=0x{x} size={d} align={d}\n", .{ @intFromPtr(roc_alloc.answer), roc_alloc.length, roc_alloc.alignment });
 }
 
 /// Roc deallocation function with size-tracking metadata
 fn rocDeallocFn(roc_dealloc: *builtins.host_abi.RocDealloc, env: *anyopaque) callconv(.c) void {
+    std.debug.print("[DEALLOC] ptr=0x{x} align={d}\n", .{ @intFromPtr(roc_dealloc.ptr), roc_dealloc.alignment });
+
     const host: *HostEnv = @ptrCast(@alignCast(env));
     const allocator = host.gpa.allocator();
 
@@ -91,6 +95,8 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
 
     // Return pointer to the user data (after the size metadata)
     roc_realloc.answer = @ptrFromInt(@intFromPtr(new_slice.ptr) + size_storage_bytes);
+
+    std.debug.print("[REALLOC] old=0x{x} new=0x{x} new_size={d}\n", .{ @intFromPtr(old_base_ptr) + size_storage_bytes, @intFromPtr(roc_realloc.answer), roc_realloc.new_length });
 }
 
 /// Roc debug function
@@ -277,12 +283,15 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) !c_int {
     };
 
     // Build List(Str) from argc/argv
+    std.debug.print("[HOST] Building args...\n", .{});
     const args_list = buildStrArgsList(argc, argv, &roc_ops);
+    std.debug.print("[HOST] args_list ptr=0x{x} len={d}\n", .{ @intFromPtr(args_list.bytes), args_list.length });
 
     // Call the app's main! entrypoint - returns I32 exit code
-    // Roc will take ownership and decref the args
+    std.debug.print("[HOST] Calling roc__main_for_host...\n", .{});
     var exit_code: i32 = undefined;
     roc__main_for_host(&roc_ops, @as(*anyopaque, @ptrCast(&exit_code)), @as(*anyopaque, @ptrCast(@constCast(&args_list))));
+    std.debug.print("[HOST] Returned from roc, exit_code={d}\n", .{exit_code});
 
     return exit_code;
 }
