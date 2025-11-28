@@ -80,8 +80,15 @@ pub fn build(b: *std.Build) void {
     const roc_dep = b.dependency("roc", .{});
     const builtins_module = roc_dep.module("builtins");
 
-    // Default step: build for all targets
+    // Cleanup step: remove all old library files to avoid confusion
+    const cleanup_step = b.step("clean", "Remove all built library files");
+    cleanup_step.dependOn(&b.addRemoveDirTree(b.path("platform/targets")).step);
+    cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/libhost.a")).step);
+    cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/host.lib")).step);
+
+    // Default step: build for all targets (with cleanup first)
     const all_step = b.getInstallStep();
+    all_step.dependOn(cleanup_step);
 
     // Create copy step for all targets
     const copy_all = b.addUpdateSourceFiles();
@@ -99,10 +106,11 @@ pub fn build(b: *std.Build) void {
         );
     }
 
-    // Native step: build only for the current platform
+    // Native step: build only for the current platform (with cleanup first)
     const native_step = b.step("native", "Build host library for native platform only");
-    const native_target = b.standardTargetOptions(.{});
+    native_step.dependOn(cleanup_step);
 
+    const native_target = b.standardTargetOptions(.{});
     const native_lib = buildHostLib(b, native_target, optimize, builtins_module);
     b.installArtifact(native_lib);
 
@@ -116,6 +124,36 @@ pub fn build(b: *std.Build) void {
     native_step.dependOn(&copy_native.step);
     native_step.dependOn(&native_lib.step);
 }
+
+/// Custom step to remove a single file if it exists
+const CleanupStep = struct {
+    step: std.Build.Step,
+    path: std.Build.LazyPath,
+
+    fn create(b: *std.Build, path: std.Build.LazyPath) *CleanupStep {
+        const self = b.allocator.create(CleanupStep) catch @panic("OOM");
+        self.* = .{
+            .step = std.Build.Step.init(.{
+                .id = .custom,
+                .name = "cleanup",
+                .owner = b,
+                .makeFn = make,
+            }),
+            .path = path,
+        };
+        return self;
+    }
+
+    fn make(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void {
+        _ = options;
+        const self: *CleanupStep = @fieldParentPtr("step", step);
+        const path = self.path.getPath2(step.owner, null);
+        std.fs.cwd().deleteFile(path) catch |err| switch (err) {
+            error.FileNotFound => {}, // Already gone, that's fine
+            else => return err,
+        };
+    }
+};
 
 fn buildHostLib(
     b: *std.Build,
