@@ -289,8 +289,10 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) !c_int {
 
     // Call the app's main! entrypoint - returns I32 exit code
     std.debug.print("[HOST] Calling roc__main_for_host...\n", .{});
-    var exit_code: i32 = undefined;
+
+    var exit_code: i32 = -99;
     roc__main_for_host(&roc_ops, @as(*anyopaque, @ptrCast(&exit_code)), @as(*anyopaque, @ptrCast(@constCast(&args_list))));
+
     std.debug.print("[HOST] Returned from roc, exit_code={d}\n", .{exit_code});
 
     return exit_code;
