@@ -2,38 +2,91 @@
 const std = @import("std");
 const builtins = @import("builtins");
 
-/// Host environment - contains our arena allocator
+/// Host environment
 const HostEnv = struct {
-    arena: std.heap.ArenaAllocator,
+    gpa: std.heap.GeneralPurposeAllocator(.{}),
 };
 
-/// Roc allocation function
+/// Roc allocation function with size-tracking metadata
 fn rocAllocFn(roc_alloc: *builtins.host_abi.RocAlloc, env: *anyopaque) callconv(.c) void {
     const host: *HostEnv = @ptrCast(@alignCast(env));
-    const allocator = host.arena.allocator();
+    const allocator = host.gpa.allocator();
 
-    const log2_align = std.math.log2_int(u32, @intCast(roc_alloc.alignment));
-    const align_enum: std.mem.Alignment = @enumFromInt(log2_align);
+    const align_enum = std.mem.Alignment.fromByteUnits(@as(usize, @intCast(roc_alloc.alignment)));
 
-    const result = allocator.rawAlloc(roc_alloc.length, align_enum, @returnAddress());
+    // Calculate additional bytes needed to store the size
+    const size_storage_bytes = @max(roc_alloc.alignment, @alignOf(usize));
+    const total_size = roc_alloc.length + size_storage_bytes;
 
-    roc_alloc.answer = result orelse {
+    // Allocate memory including space for size metadata
+    const result = allocator.rawAlloc(total_size, align_enum, @returnAddress());
+
+    const base_ptr = result orelse {
         @panic("Host allocation failed");
     };
+
+    // Store the total size (including metadata) right before the user data
+    const size_ptr: *usize = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes - @sizeOf(usize));
+    size_ptr.* = total_size;
+
+    // Return pointer to the user data (after the size metadata)
+    roc_alloc.answer = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
 }
 
-/// Roc deallocation function
+/// Roc deallocation function with size-tracking metadata
 fn rocDeallocFn(roc_dealloc: *builtins.host_abi.RocDealloc, env: *anyopaque) callconv(.c) void {
-    _ = roc_dealloc;
-    _ = env;
-    // NoOp as our arena frees all memory at once
+    const host: *HostEnv = @ptrCast(@alignCast(env));
+    const allocator = host.gpa.allocator();
+
+    // Calculate where the size metadata is stored
+    const size_storage_bytes = @max(roc_dealloc.alignment, @alignOf(usize));
+    const size_ptr: *const usize = @ptrFromInt(@intFromPtr(roc_dealloc.ptr) - @sizeOf(usize));
+
+    // Read the total size from metadata
+    const total_size = size_ptr.*;
+
+    // Calculate the base pointer (start of actual allocation)
+    const base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(roc_dealloc.ptr) - size_storage_bytes);
+
+    // Calculate alignment
+    const log2_align = std.math.log2_int(u32, @intCast(roc_dealloc.alignment));
+    const align_enum: std.mem.Alignment = @enumFromInt(log2_align);
+
+    // Free the memory (including the size metadata)
+    const slice = @as([*]u8, @ptrCast(base_ptr))[0..total_size];
+    allocator.rawFree(slice, align_enum, @returnAddress());
 }
 
-/// Roc reallocation function
+/// Roc reallocation function with size-tracking metadata
 fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) callconv(.c) void {
-    _ = roc_realloc;
-    _ = env;
-    @panic("Realloc not implemented in this example");
+    const host: *HostEnv = @ptrCast(@alignCast(env));
+    const allocator = host.gpa.allocator();
+
+    // Calculate where the size metadata is stored for the old allocation
+    const size_storage_bytes = @max(roc_realloc.alignment, @alignOf(usize));
+    const old_size_ptr: *const usize = @ptrFromInt(@intFromPtr(roc_realloc.answer) - @sizeOf(usize));
+
+    // Read the old total size from metadata
+    const old_total_size = old_size_ptr.*;
+
+    // Calculate the old base pointer (start of actual allocation)
+    const old_base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(roc_realloc.answer) - size_storage_bytes);
+
+    // Calculate new total size needed
+    const new_total_size = roc_realloc.new_length + size_storage_bytes;
+
+    // Perform reallocation
+    const old_slice = @as([*]u8, @ptrCast(old_base_ptr))[0..old_total_size];
+    const new_slice = allocator.realloc(old_slice, new_total_size) catch {
+        @panic("Host reallocation failed");
+    };
+
+    // Store the new total size in the metadata
+    const new_size_ptr: *usize = @ptrFromInt(@intFromPtr(new_slice.ptr) + size_storage_bytes - @sizeOf(usize));
+    new_size_ptr.* = new_total_size;
+
+    // Return pointer to the user data (after the size metadata)
+    roc_realloc.answer = @ptrFromInt(@intFromPtr(new_slice.ptr) + size_storage_bytes);
 }
 
 /// Roc debug function
@@ -115,7 +168,7 @@ fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr
 
     // Get allocator from environment
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-    const allocator = host.arena.allocator();
+    const allocator = host.gpa.allocator();
 
     // Read a line from stdin
     var buffer: [4096]u8 = undefined;
@@ -172,9 +225,14 @@ const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
 /// Platform host entrypoint
 fn platform_main() !void {
     var host_env = HostEnv{
-        .arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+        .gpa = std.heap.GeneralPurposeAllocator(.{}){},
     };
-    defer host_env.arena.deinit();
+    defer {
+        const leaked = host_env.gpa.deinit();
+        if (leaked == .leak) {
+            std.debug.print("Memory leak detected!\n", .{});
+        }
+    }
 
     // Create the RocOps struct
     var roc_ops = builtins.host_abi.RocOps{
