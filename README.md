@@ -38,4 +38,3 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 | arm64musl | `platform/targets/arm64musl/libhost.a` |
 | arm64glibc | `platform/targets/arm64glibc/libhost.a` |
 | arm32musl | `platform/targets/arm32musl/libhost.a` |
-| wasm32 | `platform/targets/wasm32/libhost.a` |
