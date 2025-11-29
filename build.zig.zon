@@ -7,7 +7,7 @@
             .url = "git+https://github.com/roc-lang/roc#HEAD",
             // After running `zig build`, Zig will provide the correct hash
             // which you should paste here to replace this placeholder
-            .hash = "roc-0.0.0-NAC9w0FScQCu9c7X6lsBvUd5lRYI1a9SB_UzqNfMNmQk",
+            .hash = "roc-0.0.0-NAC9w76CdgCRr3f-y6ei9UQVz1C0M4Uhihnc7TWmuVP7",
         },
     },
     .fingerprint = 0xb91745a94628a7e0,

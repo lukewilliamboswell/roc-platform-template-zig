@@ -4,7 +4,10 @@ import pf.Stdout
 
 main! : List(Str) => Try({}, [Exit(I32)])
 main! = |args| {
-    count = List.len(args)
-    Stdout.line!("Hello World! Got ${count.to_str()} args")
+    Stdout.line!("Hello Roc!")
+
+    args_str = Str.join_with(args, ", ")
+    Stdout.line!("Args: ${args_str}")
+
     Ok({})
 }

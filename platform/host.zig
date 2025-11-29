@@ -34,12 +34,12 @@ fn rocAllocFn(roc_alloc: *builtins.host_abi.RocAlloc, env: *anyopaque) callconv(
     // Return pointer to the user data (after the size metadata)
     roc_alloc.answer = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
 
-    std.debug.print("[ALLOC] ptr=0x{x} size={d} align={d}\n", .{ @intFromPtr(roc_alloc.answer), roc_alloc.length, roc_alloc.alignment });
+    std.log.debug("[ALLOC] ptr=0x{x} size={d} align={d}", .{ @intFromPtr(roc_alloc.answer), roc_alloc.length, roc_alloc.alignment });
 }
 
 /// Roc deallocation function with size-tracking metadata
 fn rocDeallocFn(roc_dealloc: *builtins.host_abi.RocDealloc, env: *anyopaque) callconv(.c) void {
-    std.debug.print("[DEALLOC] ptr=0x{x} align={d}\n", .{ @intFromPtr(roc_dealloc.ptr), roc_dealloc.alignment });
+    std.log.debug("[DEALLOC] ptr=0x{x} align={d}", .{ @intFromPtr(roc_dealloc.ptr), roc_dealloc.alignment });
 
     const host: *HostEnv = @ptrCast(@alignCast(env));
     const allocator = host.gpa.allocator();
@@ -96,14 +96,14 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
     // Return pointer to the user data (after the size metadata)
     roc_realloc.answer = @ptrFromInt(@intFromPtr(new_slice.ptr) + size_storage_bytes);
 
-    std.debug.print("[REALLOC] old=0x{x} new=0x{x} new_size={d}\n", .{ @intFromPtr(old_base_ptr) + size_storage_bytes, @intFromPtr(roc_realloc.answer), roc_realloc.new_length });
+    std.log.debug("[REALLOC] old=0x{x} new=0x{x} new_size={d}", .{ @intFromPtr(old_base_ptr) + size_storage_bytes, @intFromPtr(roc_realloc.answer), roc_realloc.new_length });
 }
 
 /// Roc debug function
 fn rocDbgFn(roc_dbg: *const builtins.host_abi.RocDbg, env: *anyopaque) callconv(.c) void {
     _ = env;
     const message = roc_dbg.utf8_bytes[0..roc_dbg.len];
-    std.debug.print("\x1b[33mRoc dbg:\x1b[0m {s}\n", .{message});
+    std.log.debug("\x1b[33mRoc dbg:\x1b[0m {s}", .{message});
 }
 
 /// Roc expect failed function
@@ -111,7 +111,7 @@ fn rocExpectFailedFn(roc_expect: *const builtins.host_abi.RocExpectFailed, env: 
     _ = env;
     const source_bytes = roc_expect.utf8_bytes[0..roc_expect.len];
     const trimmed = std.mem.trim(u8, source_bytes, " \t\n\r");
-    std.debug.print("\x1b[33mExpect failed:\x1b[0m {s}\n", .{trimmed});
+    std.log.debug("\x1b[33mExpect failed:\x1b[0m {s}", .{trimmed});
 }
 
 /// Roc crashed function
@@ -256,7 +256,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     defer {
         const leaked = host_env.gpa.deinit();
         if (leaked == .leak) {
-            std.debug.print("\x1b[33mMemory leak detected!\x1b[0m\n", .{});
+            std.log.debug("\x1b[33mMemory leak detected!\x1b[0m", .{});
         }
     }
 
@@ -276,17 +276,17 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     };
 
     // Build List(Str) from argc/argv
-    std.debug.print("[HOST] Building args...\n", .{});
+    std.log.debug("[HOST] Building args...", .{});
     const args_list = buildStrArgsList(argc, argv, &roc_ops);
-    std.debug.print("[HOST] args_list ptr=0x{x} len={d}\n", .{ @intFromPtr(args_list.bytes), args_list.length });
+    std.log.debug("[HOST] args_list ptr=0x{x} len={d}", .{ @intFromPtr(args_list.bytes), args_list.length });
 
     // Call the app's main! entrypoint - returns I32 exit code
-    std.debug.print("[HOST] Calling roc__main_for_host...\n", .{});
+    std.log.debug("[HOST] Calling roc__main_for_host...", .{});
 
     var exit_code: i32 = -99;
     roc__main_for_host(&roc_ops, @as(*anyopaque, @ptrCast(&exit_code)), @as(*anyopaque, @ptrCast(@constCast(&args_list))));
 
-    std.debug.print("[HOST] Returned from roc, exit_code={d}\n", .{exit_code});
+    std.log.debug("[HOST] Returned from roc, exit_code={d}", .{exit_code});
 
     return exit_code;
 }
