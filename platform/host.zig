@@ -147,14 +147,7 @@ fn __main() callconv(.c) void {}
 
 // C compatible main for runtime
 fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
-    return platform_main(@intCast(argc), argv) catch |err| {
-        const stderr: std.fs.File = .stderr();
-        var buf: [256]u8 = undefined;
-        var w = stderr.writer(&buf);
-        w.interface.print("\x1b[31mHost error:\x1b[0m {s}\n", .{@errorName(err)}) catch {};
-        w.interface.flush() catch {};
-        return 1;
-    };
+    return platform_main(@intCast(argc), argv);
 }
 
 // Use the actual types from builtins
@@ -256,7 +249,7 @@ const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
 };
 
 /// Platform host entrypoint
-fn platform_main(argc: usize, argv: [*][*:0]u8) !c_int {
+fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     var host_env = HostEnv{
         .gpa = std.heap.GeneralPurposeAllocator(.{}){},
     };
