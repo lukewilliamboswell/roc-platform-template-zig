@@ -4,10 +4,10 @@
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .roc = .{
-            .url = "git+https://github.com/roc-lang/roc#HEAD",
+            .url = "git+https://github.com/roc-lang/roc#2ac12ee62127e86e54efba4942b063719add7585",
             // After running `zig build`, Zig will provide the correct hash
             // which you should paste here to replace this placeholder
-            .hash = "roc-0.0.0-NAC9w76CdgCRr3f-y6ei9UQVz1C0M4Uhihnc7TWmuVP7",
+            .hash = "roc-0.0.0-NAC9w9XpegDd8L4GXIkaVvoN1KPsIOiuvZTdtCz3sP8y",
         },
     },
     .fingerprint = 0xb91745a94628a7e0,
