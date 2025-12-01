@@ -30,7 +30,7 @@ export PATH="$(pwd)/roc-src/zig-out/bin:$PATH"
 
 zig build
 
-for example in examples/*.roc; do
+for example in $(ls examples/*.roc | sort -r); do
   # Skip stdin examples except echo.roc which we handle separately
   if grep -q "Stdin" "$example" && [[ "$example" != "examples/echo.roc" ]]; then
     echo "Skipping $example (contains Stdin)"
