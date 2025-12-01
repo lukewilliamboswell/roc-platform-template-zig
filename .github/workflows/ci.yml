@@ -33,37 +33,5 @@ jobs:
           version: 0.15.2
           use-cache: false
 
-      - name: Build roc from pinned commit
-        run: |
-          set -euo pipefail
-
-          ROC_COMMIT=$(python ci/get_roc_commit.py)
-
-          git init roc-src
-          cd roc-src
-          git remote add origin https://github.com/roc-lang/roc
-          git fetch --depth 1 origin "$ROC_COMMIT"
-          git checkout --detach "$ROC_COMMIT"
-
-          zig build roc
-          echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
-
-      - run: zig build
-
-      - name: Run examples with roc
-        run: |
-          set -euo pipefail
-
-            for example in examples/*.roc; do
-            if grep -q "Stdin" "$example"; then
-              echo "Skipping $example (contains Stdin)"
-              continue
-            fi
-            echo "Running $example"
-            roc check "$example"
-            roc "$example"
-            done
-
-      - name: Bundle (linux only)
-        if: matrix.os == 'ubuntu-22.04'
-        run: ./bundle.sh
+      - name: Run all tests
+        run: bash ci/all_tests.sh

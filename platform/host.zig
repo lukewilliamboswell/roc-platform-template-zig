@@ -253,12 +253,6 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     var host_env = HostEnv{
         .gpa = std.heap.GeneralPurposeAllocator(.{}){},
     };
-    defer {
-        const leaked = host_env.gpa.deinit();
-        if (leaked == .leak) {
-            std.log.debug("\x1b[33mMemory leak detected!\x1b[0m", .{});
-        }
-    }
 
     // Create the RocOps struct
     var roc_ops = builtins.host_abi.RocOps{
@@ -287,6 +281,13 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     roc__main_for_host(&roc_ops, @as(*anyopaque, @ptrCast(&exit_code)), @as(*anyopaque, @ptrCast(@constCast(&args_list))));
 
     std.log.debug("[HOST] Returned from roc, exit_code={d}", .{exit_code});
+
+    // Check for memory leaks before returning
+    const leak_status = host_env.gpa.deinit();
+    if (leak_status == .leak) {
+        std.log.err("\x1b[33mMemory leak detected!\x1b[0m", .{});
+        std.process.exit(1);
+    }
 
     return exit_code;
 }
