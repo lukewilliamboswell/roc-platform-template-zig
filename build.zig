@@ -80,9 +80,13 @@ pub fn build(b: *std.Build) void {
     const roc_dep = b.dependency("roc", .{});
     const builtins_module = roc_dep.module("builtins");
 
-    // Cleanup step: remove all old library files to avoid confusion
+    // Cleanup step: remove only generated host library files (preserve libc.a, crt1.o, etc.)
     const cleanup_step = b.step("clean", "Remove all built library files");
-    cleanup_step.dependOn(&b.addRemoveDirTree(b.path("platform/targets")).step);
+    for (all_targets) |roc_target| {
+        cleanup_step.dependOn(&CleanupStep.create(b, b.path(
+            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
+        )).step);
+    }
     cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/libhost.a")).step);
     cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/host.lib")).step);
 

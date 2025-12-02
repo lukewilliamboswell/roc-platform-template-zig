@@ -24,9 +24,9 @@ fizzbuzz = |n| {
     divisible_by_5 = (n % 5) == 0
 
     match (divisible_by_3, divisible_by_5) {
-        (True, True) -> "FizzBuzz"
-        (True, False) -> "Fizz"
-        (False, True) -> "Buzz"
-        (False, False) -> I64.to_str(n)
+        (True, True) => "FizzBuzz"
+        (True, False) => "Fizz"
+        (False, True) => "Buzz"
+        (False, False) => I64.to_str(n)
     }
 }
