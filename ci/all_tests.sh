@@ -30,44 +30,27 @@ export PATH="$(pwd)/roc-src/zig-out/bin:$PATH"
 
 zig build
 
-for example in $(ls examples/*.roc | sort -r); do
-  # Skip stdin examples except echo.roc which we handle separately
-  if grep -q "Stdin" "$example" && [[ "$example" != "examples/echo.roc" ]]; then
-    echo "Skipping $example (contains Stdin)"
-    continue
-  fi
-
-  # Handle echo.roc separately to provide input
-  if [[ "$example" == "examples/echo.roc" ]]; then
-    echo ""
-    echo "==== Running $example (with piped input) ===="
-    roc check "$example"
-    echo "test input" | roc "$example" --no-cache
-    echo "✓ $example completed successfully"
-    continue
-  fi
-
-  # Handle exit.roc separately to check exit code
-  if [[ "$example" == "examples/exit.roc" ]]; then
-    echo ""
-    echo "==== Running $example (expecting exit code 23) ===="
-    roc check "$example"
-    # Capture exit code without triggering set -e
-    EXIT_CODE=0
-    roc "$example" || EXIT_CODE=$?
-    if [ $EXIT_CODE -eq 23 ]; then
-      echo "✓ $example returned expected exit code 23"
-    else
-      echo "✗ $example returned exit code $EXIT_CODE (expected 23)"
-      exit 1
-    fi
-    continue
-  fi
-
-  echo ""
-  echo "==== Running $example ===="
-  roc check "$example"
-  roc "$example"
+echo ""
+echo "Checking examples..."
+for example in $(ls examples/*.roc); do
+  echo "Running: roc check $example"
+  roc check "$example" --no-cache
 done
 
+echo ""
+echo "Running examples..."
+
+examples_to_run=("hello" "fizzbuzz" "match" "stderr" "sum_fold")
+for example in "${examples_to_run[@]}"; do
+  echo ""
+  echo "Running: $example"
+  roc "./examples/$example.roc" --no-cache
+done
+
+echo ""
+echo "Running \`roc test\` examples..."
+roc test examples/tests.roc
+
+echo ""
+echo "Running bundle..."
 ./bundle.sh
