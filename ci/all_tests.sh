@@ -48,6 +48,10 @@ for example in "${examples_to_run[@]}"; do
 done
 
 echo ""
+echo "Running echo example..."
+echo "yoo" | roc examples/echo.roc --no-cache
+
+echo ""
 echo "Running \`roc test\` examples..."
 roc test examples/tests.roc
 
