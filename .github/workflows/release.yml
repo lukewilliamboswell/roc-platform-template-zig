@@ -214,7 +214,7 @@ jobs:
           # Create release with auto-generated notes
           gh release create "${{ github.event.inputs.release_tag }}" \
             "$BUNDLE_FILE" \
-            --title "Release ${{ github.event.inputs.release_tag }}" \
+            --title "${{ github.event.inputs.release_tag }}" \
             --generate-notes \
             --notes "Platform bundle built with Zig 0.15.2 and Roc $ROC_COMMIT"
 
