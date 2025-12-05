@@ -28,7 +28,10 @@ fi
 # Ensure roc is in PATH for local runs
 export PATH="$(pwd)/roc-src/zig-out/bin:$PATH"
 
-zig build
+# Skip zig build if SKIP_ZIG_BUILD is set (used in release testing)
+if [ -z "${SKIP_ZIG_BUILD:-}" ]; then
+  zig build
+fi
 
 echo ""
 echo "Checking examples..."
@@ -40,7 +43,7 @@ done
 echo ""
 echo "Running examples..."
 
-examples_to_run=("hello" "fizzbuzz" "match" "stderr" "sum_fold")
+examples_to_run=("hello" "hello_world" "fizzbuzz" "match" "stderr" "sum_fold")
 for example in "${examples_to_run[@]}"; do
   echo ""
   echo "Running: $example"
