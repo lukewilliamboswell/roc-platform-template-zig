@@ -149,7 +149,7 @@ jobs:
           echo "HTTP_SERVER_PID=$HTTP_SERVER_PID" >> "$GITHUB_ENV"
 
           # Wait for server to start
-          sleep 2
+          sleep 5
 
           # Verify server is running and bundle is accessible
           if ! curl -f -I "http://localhost:8000/${{ needs.build-and-bundle.outputs.bundle_filename }}" > /dev/null 2>&1; then
