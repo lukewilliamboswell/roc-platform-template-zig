@@ -5,6 +5,7 @@ const builtins = @import("builtins");
 /// Host environment
 const HostEnv = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
+    stdin_reader: std.Io.Reader,
 };
 
 /// Roc allocation function with size-tracking metadata
@@ -177,33 +178,29 @@ fn hostedStderrLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
 fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = args_ptr; // Argument is {} which is zero-sized
 
-    // Read a line from stdin
-    var buffer: [4096]u8 = undefined;
-    const stdin_file: std.fs.File = .stdin();
-    const bytes_read = stdin_file.read(&buffer) catch {
-        // Return empty string on error
-        const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
-        result.* = RocStr.empty();
-        return;
-    };
+    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
+    var reader = host.stdin_reader;
 
-    // Handle EOF (no bytes read)
-    if (bytes_read == 0) {
-        const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
-        result.* = RocStr.empty();
-        return;
-    }
+    var line = reader.takeDelimiter('\n') catch |err| switch (err) {
+        error.ReadFailed => &.{}, // Return empty string on error
+        error.StreamTooLong => blk: {
+            // Reader buffer is to small for the given input, we just return the full buffer.
+            const buffered = reader.buffered();
+            reader.toss(buffered.len);
+            break :blk buffered;
+        },
+    } orelse &.{};
 
-    // Find newline and trim it (handle both \n and \r\n)
-    const line_with_newline = buffer[0..bytes_read];
-    var line = if (std.mem.indexOfScalar(u8, line_with_newline, '\n')) |newline_idx|
-        line_with_newline[0..newline_idx]
-    else
-        line_with_newline;
-
-    // Also trim trailing \r for Windows line endings
+    // Trim trailing \r for Windows line endings
     if (line.len > 0 and line[line.len - 1] == '\r') {
         line = line[0 .. line.len - 1];
+    }
+
+    if (line.len == 0) {
+        // Return empty string
+        const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
+        result.* = RocStr.empty();
+        return;
     }
 
     // Create RocStr from the read line - RocStr.init handles allocation internally
@@ -238,8 +235,12 @@ const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
 
 /// Platform host entrypoint
 fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
+    var stdin_buffer: [4096]u8 = undefined;
+
+    const stdin_reader = std.fs.File.stdin().reader(&stdin_buffer).interface;
     var host_env = HostEnv{
         .gpa = std.heap.GeneralPurposeAllocator(.{}){},
+        .stdin_reader = stdin_reader,
     };
 
     // Create the RocOps struct
