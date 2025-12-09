@@ -59,5 +59,57 @@ echo "Running \`roc test\` examples..."
 roc test examples/tests.roc
 
 echo ""
+echo "Building examples with roc build..."
+
+# Detect platform for executable extension
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+  EXE_EXT=".exe"
+else
+  EXE_EXT=""
+fi
+
+mkdir -p build-output
+
+# Build and run simple examples
+for example in hello hello_world fizzbuzz match sum_fold; do
+  echo ""
+  echo "Building: $example"
+  roc build "./examples/$example.roc" --output "build-output/$example$EXE_EXT" --no-cache
+  echo "Running compiled: $example"
+  "./build-output/$example$EXE_EXT"
+done
+
+# Test exit.roc (expects exit code 23)
+echo ""
+echo "Building: exit"
+roc build "./examples/exit.roc" --output "build-output/exit$EXE_EXT" --no-cache
+set +e
+"./build-output/exit$EXE_EXT"
+EXIT_CODE=$?
+set -e
+if [ "$EXIT_CODE" -eq 23 ]; then
+  echo "exit example correctly returned exit code 23"
+else
+  echo "ERROR: exit returned $EXIT_CODE, expected 23"
+  exit 1
+fi
+
+# Test echo.roc with piped input
+echo ""
+echo "Building: echo"
+roc build "./examples/echo.roc" --output "build-output/echo$EXE_EXT" --no-cache
+echo "Running compiled: echo (with piped input)"
+echo "test input" | "./build-output/echo$EXE_EXT"
+
+# Test stderr.roc
+echo ""
+echo "Building: stderr"
+roc build "./examples/stderr.roc" --output "build-output/stderr$EXE_EXT" --no-cache
+echo "Running compiled: stderr"
+"./build-output/stderr$EXE_EXT"
+
+rm -rf build-output
+
+echo ""
 echo "Running bundle..."
 ./bundle.sh

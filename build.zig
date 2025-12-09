@@ -7,32 +7,20 @@ const RocTarget = enum {
     x64mac,
     x64win,
     x64musl,
-    x64glibc,
 
     // arm64 (aarch64) targets
     arm64mac,
     arm64win,
     arm64musl,
-    arm64glibc,
-
-    // arm32 targets
-    arm32musl,
-
-    // WebAssembly
-    wasm32,
 
     fn toZigTarget(self: RocTarget) std.Target.Query {
         return switch (self) {
             .x64mac => .{ .cpu_arch = .x86_64, .os_tag = .macos },
             .x64win => .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu },
             .x64musl => .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
-            .x64glibc => .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
             .arm64mac => .{ .cpu_arch = .aarch64, .os_tag = .macos },
             .arm64win => .{ .cpu_arch = .aarch64, .os_tag = .windows, .abi = .gnu },
             .arm64musl => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl },
-            .arm64glibc => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .gnu },
-            .arm32musl => .{ .cpu_arch = .arm, .os_tag = .linux, .abi = .musleabihf },
-            .wasm32 => .{ .cpu_arch = .wasm32, .os_tag = .wasi },
         };
     }
 
@@ -41,13 +29,9 @@ const RocTarget = enum {
             .x64mac => "x64mac",
             .x64win => "x64win",
             .x64musl => "x64musl",
-            .x64glibc => "x64glibc",
             .arm64mac => "arm64mac",
             .arm64win => "arm64win",
             .arm64musl => "arm64musl",
-            .arm64glibc => "arm64glibc",
-            .arm32musl => "arm32musl",
-            .wasm32 => "wasm32",
         };
     }
 
@@ -64,13 +48,9 @@ const all_targets = [_]RocTarget{
     .x64mac,
     .x64win,
     .x64musl,
-    .x64glibc,
     .arm64mac,
     .arm64win,
     .arm64musl,
-    .arm64glibc,
-    .arm32musl,
-    .wasm32,
 };
 
 pub fn build(b: *std.Build) void {

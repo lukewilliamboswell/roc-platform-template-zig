@@ -9,7 +9,9 @@ A template for building [Roc platforms](https://www.roc-lang.org/platforms) usin
 
 ## Examples
 
-Run examples with `roc examples/<name>.roc`:
+Run examples with interpreter: `roc examples/<name>.roc`
+
+Build standalone executable: `roc build examples/<name>.roc`
 
 | Example | Features Demonstrated | Run |
 |---------|----------------------|-----|
@@ -47,9 +49,8 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 | x64mac | `platform/targets/x64mac/libhost.a` |
 | x64win | `platform/targets/x64win/host.lib` |
 | x64musl | `platform/targets/x64musl/libhost.a` |
-| x64glibc | `platform/targets/x64glibc/libhost.a` |
 | arm64mac | `platform/targets/arm64mac/libhost.a` |
 | arm64win | `platform/targets/arm64win/host.lib` |
 | arm64musl | `platform/targets/arm64musl/libhost.a` |
-| arm64glibc | `platform/targets/arm64glibc/libhost.a` |
-| arm32musl | `platform/targets/arm32musl/libhost.a` |
+
+Linux musl targets include statically linked C runtime files (`crt1.o`, `libc.a`) for standalone executables.
