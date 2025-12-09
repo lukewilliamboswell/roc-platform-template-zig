@@ -55,6 +55,10 @@ echo "Running echo example..."
 echo "yoo" | roc examples/echo.roc --no-cache
 
 echo ""
+echo "Running echo_multiline example..."
+printf "line one\nline two\nline three\n" | roc examples/echo_multiline.roc --no-cache
+
+echo ""
 echo "Running \`roc test\` examples..."
 roc test examples/tests.roc
 
