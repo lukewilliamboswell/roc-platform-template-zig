@@ -5,7 +5,7 @@ const builtins = @import("builtins");
 /// Host environment
 const HostEnv = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
-    stdin_reader: *std.io.Reader,
+    stdin_reader: std.fs.File.Reader,
 };
 
 /// Roc allocation function with size-tracking metadata
@@ -179,7 +179,7 @@ fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr
     _ = args_ptr; // Argument is {} which is zero-sized
 
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-    var reader = host.stdin_reader;
+    var reader = &host.stdin_reader.interface;
 
     var line = reader.takeDelimiter('\n') catch |err| switch (err) {
         error.ReadFailed => &.{}, // Return empty string on error
@@ -237,11 +237,9 @@ const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
 fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     var stdin_buffer: [4096]u8 = undefined;
 
-    var stdin_file_reader = std.fs.File.stdin().reader(&stdin_buffer);
-    const stdin_reader = &stdin_file_reader.interface;
     var host_env = HostEnv{
         .gpa = std.heap.GeneralPurposeAllocator(.{}){},
-        .stdin_reader = stdin_reader,
+        .stdin_reader = std.fs.File.stdin().reader(&stdin_buffer),
     };
 
     // Create the RocOps struct
