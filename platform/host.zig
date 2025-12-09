@@ -181,15 +181,20 @@ fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr
     const host: *HostEnv = @ptrCast(@alignCast(ops.env));
     var reader = &host.stdin_reader.interface;
 
-    var line = reader.takeDelimiter('\n') catch |err| switch (err) {
-        error.ReadFailed => &.{}, // Return empty string on error
-        error.StreamTooLong => blk: {
-            // Reader buffer is to small for the given input, we just return the full buffer.
-            const buffered = reader.buffered();
-            reader.toss(buffered.len);
-            break :blk buffered;
-        },
-    } orelse &.{};
+    var line = while (true) {
+        const maybe_line = reader.takeDelimiter('\n') catch |err| switch (err) {
+            error.ReadFailed => break &.{}, // Return empty string on error
+            error.StreamTooLong => {
+                // Skip the overlong line so the next call starts fresh.
+                _ = reader.discardDelimiterInclusive('\n') catch |discard_err| switch (discard_err) {
+                    error.ReadFailed, error.EndOfStream => break &.{},
+                };
+                continue;
+            },
+        } orelse break &.{};
+
+        break maybe_line;
+    };
 
     // Trim trailing \r for Windows line endings
     if (line.len > 0 and line[line.len - 1] == '\r') {
