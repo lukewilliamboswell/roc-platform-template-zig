@@ -7,32 +7,20 @@ const RocTarget = enum {
     x64mac,
     x64win,
     x64musl,
-    x64glibc,
 
     // arm64 (aarch64) targets
     arm64mac,
     arm64win,
     arm64musl,
-    arm64glibc,
-
-    // arm32 targets
-    arm32musl,
-
-    // WebAssembly
-    wasm32,
 
     fn toZigTarget(self: RocTarget) std.Target.Query {
         return switch (self) {
             .x64mac => .{ .cpu_arch = .x86_64, .os_tag = .macos },
             .x64win => .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .gnu },
             .x64musl => .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
-            .x64glibc => .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .gnu },
             .arm64mac => .{ .cpu_arch = .aarch64, .os_tag = .macos },
             .arm64win => .{ .cpu_arch = .aarch64, .os_tag = .windows, .abi = .gnu },
             .arm64musl => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl },
-            .arm64glibc => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .gnu },
-            .arm32musl => .{ .cpu_arch = .arm, .os_tag = .linux, .abi = .musleabihf },
-            .wasm32 => .{ .cpu_arch = .wasm32, .os_tag = .wasi },
         };
     }
 
@@ -41,13 +29,9 @@ const RocTarget = enum {
             .x64mac => "x64mac",
             .x64win => "x64win",
             .x64musl => "x64musl",
-            .x64glibc => "x64glibc",
             .arm64mac => "arm64mac",
             .arm64win => "arm64win",
             .arm64musl => "arm64musl",
-            .arm64glibc => "arm64glibc",
-            .arm32musl => "arm32musl",
-            .wasm32 => "wasm32",
         };
     }
 
@@ -64,13 +48,9 @@ const all_targets = [_]RocTarget{
     .x64mac,
     .x64win,
     .x64musl,
-    .x64glibc,
     .arm64mac,
     .arm64win,
     .arm64musl,
-    .arm64glibc,
-    .arm32musl,
-    .wasm32,
 };
 
 pub fn build(b: *std.Build) void {
@@ -110,23 +90,50 @@ pub fn build(b: *std.Build) void {
         );
     }
 
-    // Native step: build only for the current platform (with cleanup first)
+    // Native step: build only for the current platform (with full cleanup first)
     const native_step = b.step("native", "Build host library for native platform only");
     native_step.dependOn(cleanup_step);
 
     const native_target = b.standardTargetOptions(.{});
+
+    // Detect native RocTarget and copy to proper targets folder
+    const native_roc_target = detectNativeRocTarget(native_target.result) orelse {
+        std.debug.print("Unsupported native platform\n", .{});
+        return;
+    };
+
     const native_lib = buildHostLib(b, native_target, optimize, builtins_module);
     b.installArtifact(native_lib);
 
-    // Copy native library to platform/libhost.a (or host.lib)
     const copy_native = b.addUpdateSourceFiles();
-    const native_filename = if (native_target.result.os.tag == .windows) "host.lib" else "libhost.a";
     copy_native.addCopyFileToSource(
         native_lib.getEmittedBin(),
-        b.pathJoin(&.{ "platform", native_filename }),
+        b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), native_roc_target.libFilename() }),
     );
     native_step.dependOn(&copy_native.step);
     native_step.dependOn(&native_lib.step);
+}
+
+/// Detect which RocTarget matches the native platform
+fn detectNativeRocTarget(target: std.Target) ?RocTarget {
+    return switch (target.os.tag) {
+        .macos => switch (target.cpu.arch) {
+            .x86_64 => .x64mac,
+            .aarch64 => .arm64mac,
+            else => null,
+        },
+        .linux => switch (target.cpu.arch) {
+            .x86_64 => .x64musl,
+            .aarch64 => .arm64musl,
+            else => null,
+        },
+        .windows => switch (target.cpu.arch) {
+            .x86_64 => .x64win,
+            .aarch64 => .arm64win,
+            else => null,
+        },
+        else => null,
+    };
 }
 
 /// Custom step to remove a single file if it exists

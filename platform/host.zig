@@ -2,6 +2,10 @@
 const std = @import("std");
 const builtins = @import("builtins");
 
+/// Global flag to track if dbg or expect_failed was called.
+/// If set, program exits with non-zero code to prevent accidental commits.
+var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+
 /// Host environment
 const HostEnv = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
@@ -103,16 +107,24 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
 /// Roc debug function
 fn rocDbgFn(roc_dbg: *const builtins.host_abi.RocDbg, env: *anyopaque) callconv(.c) void {
     _ = env;
+    debug_or_expect_called.store(true, .release);
     const message = roc_dbg.utf8_bytes[0..roc_dbg.len];
-    std.log.debug("\x1b[33mRoc dbg:\x1b[0m {s}", .{message});
+    const stderr: std.fs.File = .stderr();
+    stderr.writeAll("\x1b[33mdbg:\x1b[0m ") catch {};
+    stderr.writeAll(message) catch {};
+    stderr.writeAll("\n") catch {};
 }
 
 /// Roc expect failed function
 fn rocExpectFailedFn(roc_expect: *const builtins.host_abi.RocExpectFailed, env: *anyopaque) callconv(.c) void {
     _ = env;
+    debug_or_expect_called.store(true, .release);
     const source_bytes = roc_expect.utf8_bytes[0..roc_expect.len];
     const trimmed = std.mem.trim(u8, source_bytes, " \t\n\r");
-    std.log.debug("\x1b[33mExpect failed:\x1b[0m {s}", .{trimmed});
+    const stderr: std.fs.File = .stderr();
+    stderr.writeAll("\x1b[33mexpect failed:\x1b[0m ") catch {};
+    stderr.writeAll(trimmed) catch {};
+    stderr.writeAll("\n") catch {};
 }
 
 /// Roc crashed function
@@ -280,6 +292,12 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     if (leak_status == .leak) {
         std.log.err("\x1b[33mMemory leak detected!\x1b[0m", .{});
         std.process.exit(1);
+    }
+
+    // If dbg or expect_failed was called, ensure non-zero exit code
+    // to prevent accidental commits with debug statements or failing tests
+    if (debug_or_expect_called.load(.acquire) and exit_code == 0) {
+        return 1;
     }
 
     return exit_code;
