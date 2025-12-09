@@ -103,7 +103,10 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
 fn rocDbgFn(roc_dbg: *const builtins.host_abi.RocDbg, env: *anyopaque) callconv(.c) void {
     _ = env;
     const message = roc_dbg.utf8_bytes[0..roc_dbg.len];
-    std.log.debug("\x1b[33mRoc dbg:\x1b[0m {s}", .{message});
+    const stderr: std.fs.File = .stderr();
+    stderr.writeAll("\x1b[33mdbg:\x1b[0m ") catch {};
+    stderr.writeAll(message) catch {};
+    stderr.writeAll("\n") catch {};
 }
 
 /// Roc expect failed function
@@ -111,7 +114,10 @@ fn rocExpectFailedFn(roc_expect: *const builtins.host_abi.RocExpectFailed, env: 
     _ = env;
     const source_bytes = roc_expect.utf8_bytes[0..roc_expect.len];
     const trimmed = std.mem.trim(u8, source_bytes, " \t\n\r");
-    std.log.debug("\x1b[33mExpect failed:\x1b[0m {s}", .{trimmed});
+    const stderr: std.fs.File = .stderr();
+    stderr.writeAll("\x1b[33mexpect failed:\x1b[0m ") catch {};
+    stderr.writeAll(trimmed) catch {};
+    stderr.writeAll("\n") catch {};
 }
 
 /// Roc crashed function
