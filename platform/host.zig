@@ -5,7 +5,7 @@ const builtins = @import("builtins");
 /// Host environment
 const HostEnv = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
-    stdin_reader: std.Io.Reader,
+    stdin_reader: *std.io.Reader,
 };
 
 /// Roc allocation function with size-tracking metadata
@@ -237,7 +237,8 @@ const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
 fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     var stdin_buffer: [4096]u8 = undefined;
 
-    const stdin_reader = std.fs.File.stdin().reader(&stdin_buffer).interface;
+    var stdin_file_reader = std.fs.File.stdin().reader(&stdin_buffer);
+    const stdin_reader = &stdin_file_reader.interface;
     var host_env = HostEnv{
         .gpa = std.heap.GeneralPurposeAllocator(.{}){},
         .stdin_reader = stdin_reader,
