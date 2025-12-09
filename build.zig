@@ -90,23 +90,50 @@ pub fn build(b: *std.Build) void {
         );
     }
 
-    // Native step: build only for the current platform (with cleanup first)
+    // Native step: build only for the current platform (with full cleanup first)
     const native_step = b.step("native", "Build host library for native platform only");
     native_step.dependOn(cleanup_step);
 
     const native_target = b.standardTargetOptions(.{});
+
+    // Detect native RocTarget and copy to proper targets folder
+    const native_roc_target = detectNativeRocTarget(native_target.result) orelse {
+        std.debug.print("Unsupported native platform\n", .{});
+        return;
+    };
+
     const native_lib = buildHostLib(b, native_target, optimize, builtins_module);
     b.installArtifact(native_lib);
 
-    // Copy native library to platform/libhost.a (or host.lib)
     const copy_native = b.addUpdateSourceFiles();
-    const native_filename = if (native_target.result.os.tag == .windows) "host.lib" else "libhost.a";
     copy_native.addCopyFileToSource(
         native_lib.getEmittedBin(),
-        b.pathJoin(&.{ "platform", native_filename }),
+        b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), native_roc_target.libFilename() }),
     );
     native_step.dependOn(&copy_native.step);
     native_step.dependOn(&native_lib.step);
+}
+
+/// Detect which RocTarget matches the native platform
+fn detectNativeRocTarget(target: std.Target) ?RocTarget {
+    return switch (target.os.tag) {
+        .macos => switch (target.cpu.arch) {
+            .x86_64 => .x64mac,
+            .aarch64 => .arm64mac,
+            else => null,
+        },
+        .linux => switch (target.cpu.arch) {
+            .x86_64 => .x64musl,
+            .aarch64 => .arm64musl,
+            else => null,
+        },
+        .windows => switch (target.cpu.arch) {
+            .x86_64 => .x64win,
+            .aarch64 => .arm64win,
+            else => null,
+        },
+        else => null,
+    };
 }
 
 /// Custom step to remove a single file if it exists
