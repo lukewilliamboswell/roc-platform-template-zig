@@ -74,7 +74,8 @@ mkdir -p build-output
 for example in hello hello_world fizzbuzz match sum_fold; do
   echo ""
   echo "Building: $example"
-  roc build "./examples/$example.roc" --output "build-output/$example$EXE_EXT" --no-cache
+  roc build "./examples/$example.roc"
+  mv "$example$EXE_EXT" "build-output/$example$EXE_EXT"
   echo "Running compiled: $example"
   "./build-output/$example$EXE_EXT"
 done
@@ -82,7 +83,8 @@ done
 # Test exit.roc (expects exit code 23)
 echo ""
 echo "Building: exit"
-roc build "./examples/exit.roc" --output "build-output/exit$EXE_EXT" --no-cache
+roc build "./examples/exit.roc"
+mv "exit$EXE_EXT" "build-output/exit$EXE_EXT"
 set +e
 "./build-output/exit$EXE_EXT"
 EXIT_CODE=$?
@@ -97,16 +99,49 @@ fi
 # Test echo.roc with piped input
 echo ""
 echo "Building: echo"
-roc build "./examples/echo.roc" --output "build-output/echo$EXE_EXT" --no-cache
+roc build "./examples/echo.roc"
+mv "echo$EXE_EXT" "build-output/echo$EXE_EXT"
 echo "Running compiled: echo (with piped input)"
 echo "test input" | "./build-output/echo$EXE_EXT"
 
 # Test stderr.roc
 echo ""
 echo "Building: stderr"
-roc build "./examples/stderr.roc" --output "build-output/stderr$EXE_EXT" --no-cache
+roc build "./examples/stderr.roc"
+mv "stderr$EXE_EXT" "build-output/stderr$EXE_EXT"
 echo "Running compiled: stderr"
 "./build-output/stderr$EXE_EXT"
+
+# Test dbg_test.roc - verifies dbg prints to stderr and causes non-zero exit
+echo ""
+echo "Testing dbg behavior (interpreter mode)..."
+set +e
+OUTPUT=$(roc "./examples/dbg_test.roc" --no-cache 2>&1)
+EXIT_CODE=$?
+set -e
+if [ "$EXIT_CODE" -ne 0 ] && echo "$OUTPUT" | grep -q "dbg:"; then
+  echo "dbg test passed (interpreter): exit code $EXIT_CODE, output contains 'dbg:'"
+else
+  echo "ERROR: dbg test failed (interpreter): exit code $EXIT_CODE"
+  echo "Output: $OUTPUT"
+  exit 1
+fi
+
+echo ""
+echo "Testing dbg behavior (compiled executable)..."
+roc build "./examples/dbg_test.roc"
+mv "dbg_test$EXE_EXT" "build-output/dbg_test$EXE_EXT"
+set +e
+OUTPUT=$("./build-output/dbg_test$EXE_EXT" 2>&1)
+EXIT_CODE=$?
+set -e
+if [ "$EXIT_CODE" -ne 0 ] && echo "$OUTPUT" | grep -q "dbg:"; then
+  echo "dbg test passed (compiled): exit code $EXIT_CODE, output contains 'dbg:'"
+else
+  echo "ERROR: dbg test failed (compiled): exit code $EXIT_CODE"
+  echo "Output: $OUTPUT"
+  exit 1
+fi
 
 rm -rf build-output
 
