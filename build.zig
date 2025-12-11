@@ -112,6 +112,45 @@ pub fn build(b: *std.Build) void {
     );
     native_step.dependOn(&copy_native.step);
     native_step.dependOn(&native_lib.step);
+
+    // Test step: run unit tests and integration tests
+    const test_step = b.step("test", "Run all tests (unit tests and integration tests)");
+
+    // Unit tests for platform code
+    const host_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("platform/host.zig"),
+            .target = native_target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "builtins", .module = builtins_module },
+            },
+        }),
+    });
+
+    const run_host_tests = b.addRunArtifact(host_tests);
+
+    // Integration test runner
+    const test_runner = b.addExecutable(.{
+        .name = "test_runner",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("ci/test_runner.zig"),
+            .target = native_target,
+            .optimize = optimize,
+        }),
+    });
+
+    const run_integration = b.addRunArtifact(test_runner);
+    // Integration tests need the native platform library to be built first
+    run_integration.step.dependOn(&copy_native.step);
+    // Run integration after unit tests
+    run_integration.step.dependOn(&run_host_tests.step);
+    // Pass through args (e.g. --verbose)
+    if (b.args) |args| {
+        run_integration.addArgs(args);
+    }
+
+    test_step.dependOn(&run_integration.step);
 }
 
 /// Detect which RocTarget matches the native platform

@@ -17,7 +17,8 @@ fn rocAllocFn(roc_alloc: *builtins.host_abi.RocAlloc, env: *anyopaque) callconv(
     const host: *HostEnv = @ptrCast(@alignCast(env));
     const allocator = host.gpa.allocator();
 
-    const align_enum = std.mem.Alignment.fromByteUnits(@as(usize, @intCast(roc_alloc.alignment)));
+    const min_alignment: usize = @max(roc_alloc.alignment, @alignOf(usize));
+    const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
 
     // Calculate additional bytes needed to store the size
     const size_storage_bytes = @max(roc_alloc.alignment, @alignOf(usize));
@@ -60,8 +61,8 @@ fn rocDeallocFn(roc_dealloc: *builtins.host_abi.RocDealloc, env: *anyopaque) cal
     const base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(roc_dealloc.ptr) - size_storage_bytes);
 
     // Calculate alignment
-    const log2_align = std.math.log2_int(u32, @intCast(roc_dealloc.alignment));
-    const align_enum: std.mem.Alignment = @enumFromInt(log2_align);
+    const min_alignment: usize = @max(roc_dealloc.alignment, @alignOf(usize));
+    const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
 
     // Free the memory (including the size metadata)
     const slice = @as([*]u8, @ptrCast(base_ptr))[0..total_size];
@@ -73,8 +74,12 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
     const host: *HostEnv = @ptrCast(@alignCast(env));
     const allocator = host.gpa.allocator();
 
+    // Calculate alignment
+    const min_alignment: usize = @max(roc_realloc.alignment, @alignOf(usize));
+    const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
+
     // Calculate where the size metadata is stored for the old allocation
-    const size_storage_bytes = @max(roc_realloc.alignment, @alignOf(usize));
+    const size_storage_bytes = min_alignment;
     const old_size_ptr: *const usize = @ptrFromInt(@intFromPtr(roc_realloc.answer) - @sizeOf(usize));
 
     // Read the old total size from metadata
@@ -86,22 +91,32 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
     // Calculate new total size needed
     const new_total_size = roc_realloc.new_length + size_storage_bytes;
 
-    // Perform reallocation
-    const old_slice = @as([*]u8, @ptrCast(old_base_ptr))[0..old_total_size];
-    const new_slice = allocator.realloc(old_slice, new_total_size) catch {
+    // Allocate new memory with proper alignment
+    const new_base_ptr = allocator.rawAlloc(new_total_size, align_enum, @returnAddress()) orelse {
         const stderr: std.fs.File = .stderr();
         stderr.writeAll("\x1b[31mHost error:\x1b[0m reallocation failed, out of memory\n") catch {};
         std.process.exit(1);
     };
 
+    // Copy old data to new allocation (excluding metadata, just user data)
+    const old_user_data_size = old_total_size - size_storage_bytes;
+    const copy_size = @min(old_user_data_size, roc_realloc.new_length);
+    const new_user_ptr: [*]u8 = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes);
+    const old_user_ptr: [*]const u8 = @ptrCast(roc_realloc.answer);
+    @memcpy(new_user_ptr, old_user_ptr[0..copy_size]);
+
+    // Free old allocation
+    const old_slice = old_base_ptr[0..old_total_size];
+    allocator.rawFree(old_slice, align_enum, @returnAddress());
+
     // Store the new total size in the metadata
-    const new_size_ptr: *usize = @ptrFromInt(@intFromPtr(new_slice.ptr) + size_storage_bytes - @sizeOf(usize));
+    const new_size_ptr: *usize = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes - @sizeOf(usize));
     new_size_ptr.* = new_total_size;
 
     // Return pointer to the user data (after the size metadata)
-    roc_realloc.answer = @ptrFromInt(@intFromPtr(new_slice.ptr) + size_storage_bytes);
+    roc_realloc.answer = new_user_ptr;
 
-    std.log.debug("[REALLOC] old=0x{x} new=0x{x} new_size={d}", .{ @intFromPtr(old_base_ptr) + size_storage_bytes, @intFromPtr(roc_realloc.answer), roc_realloc.new_length });
+    std.log.debug("[REALLOC] old=0x{x} new=0x{x} new_size={d}", .{ @intFromPtr(roc_realloc.answer), @intFromPtr(new_user_ptr), roc_realloc.new_length });
 }
 
 /// Roc debug function
@@ -143,14 +158,16 @@ fn rocCrashedFn(roc_crashed: *const builtins.host_abi.RocCrashed, env: *anyopaqu
 // Follows RocCall ABI: ops, ret_ptr, then argument pointers
 extern fn roc__main_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, arg_ptr: ?*anyopaque) callconv(.c) void;
 
-// OS-specific entry point handling
+// OS-specific entry point handling (not exported during tests)
 comptime {
-    // Export main for all platforms
-    @export(&main, .{ .name = "main" });
+    if (!@import("builtin").is_test) {
+        // Export main for all platforms
+        @export(&main, .{ .name = "main" });
 
-    // Windows MinGW/MSVCRT compatibility: export __main stub
-    if (@import("builtin").os.tag == .windows) {
-        @export(&__main, .{ .name = "__main" });
+        // Windows MinGW/MSVCRT compatibility: export __main stub
+        if (@import("builtin").os.tag == .windows) {
+            @export(&__main, .{ .name = "__main" });
+        }
     }
 }
 
