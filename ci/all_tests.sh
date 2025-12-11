@@ -54,8 +54,8 @@ if [ -z "${SKIP_ZIG_BUILD:-}" ]; then
   echo ""
   echo "Running tests..."
   zig build test -- --verbose
-fi
 
-echo ""
-echo "Running bundle..."
-./bundle.sh
+  echo ""
+  echo "Running bundle..."
+  ./bundle.sh
+fi
