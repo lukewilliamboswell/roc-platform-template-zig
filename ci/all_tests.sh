@@ -52,10 +52,10 @@ if [ -z "${SKIP_ZIG_BUILD:-}" ]; then
   zig build
 
   echo ""
-  echo "Running tests..."
-  zig build test -- --verbose
-
-  echo ""
   echo "Running bundle..."
   ./bundle.sh
 fi
+
+echo ""
+echo "Running tests..."
+zig build test -- --verbose

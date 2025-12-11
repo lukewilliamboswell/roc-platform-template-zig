@@ -4,6 +4,8 @@ const Allocator = std.mem.Allocator;
 
 var verbose: bool = false;
 
+const SERVER_PORT = 8089;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -40,10 +42,69 @@ pub fn main() !void {
     else
         "unknown";
 
+    // Find the bundle file
+    const bundle_filename = findBundleFile(allocator) catch |err| {
+        switch (err) {
+            error.BundleNotFound => {
+                try stderr.interface.print("Failed to find bundle .tar.zst file\n", .{});
+                try stderr.interface.print("Make sure to run ./bundle.sh first\n", .{});
+            },
+            error.MultipleBundlesFound => {
+                try stderr.interface.print("Multiple .tar.zst bundle files found\n", .{});
+                try stderr.interface.print("Please remove old bundles and keep only the current one\n", .{});
+                try stderr.interface.print("You can clean up with: rm *.tar.zst && ./bundle.sh\n", .{});
+            },
+            else => {
+                try stderr.interface.print("Failed to find bundle: {}\n", .{err});
+            },
+        }
+        try stderr.interface.flush();
+        std.process.exit(1);
+    };
+    defer allocator.free(bundle_filename);
+
+    const bundle_url = try std.fmt.allocPrint(allocator, "http://localhost:{d}/{s}", .{ SERVER_PORT, bundle_filename });
+    defer allocator.free(bundle_url);
+
     if (verbose) {
-        try stdout.interface.print("Running integration tests:\n\n{s}\n\n", .{roc_version});
+        try stdout.interface.print("Running integration tests:\n\n{s}\n", .{roc_version});
+        try stdout.interface.print("Bundle: {s}\n", .{bundle_filename});
+        try stdout.interface.print("URL: {s}\n\n", .{bundle_url});
         try stdout.interface.flush();
     }
+
+    // Start HTTP server in background thread
+    var server_ctx = ServerContext{
+        .allocator = allocator,
+        .bundle_filename = bundle_filename,
+    };
+    const server_thread = try std.Thread.spawn(.{}, runHttpServer, .{&server_ctx});
+    defer {
+        server_ctx.should_stop.store(true, .release);
+        server_thread.join();
+    }
+
+    // Give server time to start
+    std.Thread.sleep(100 * std.time.ns_per_ms);
+
+    // Create temp directory for modified example files
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+
+    // Get the temp directory path
+    const temp_path = tmp_dir.dir.realpathAlloc(allocator, ".") catch |err| {
+        try stderr.interface.print("Failed to get temp path: {}\n", .{err});
+        try stderr.interface.flush();
+        std.process.exit(1);
+    };
+    defer allocator.free(temp_path);
+
+    // Copy and modify example files to use bundle URL
+    prepareTestFiles(allocator, temp_path, bundle_url) catch |err| {
+        try stderr.interface.print("Failed to prepare test files: {}\n", .{err});
+        try stderr.interface.flush();
+        std.process.exit(1);
+    };
 
     // Category counters
     var check_passed: usize = 0;
@@ -60,7 +121,12 @@ pub fn main() !void {
 
     // Run all test cases
     for (test_cases) |tc| {
-        const result = runTestRuntime(allocator, tc);
+        // Build the temp file path for this test
+        const example_basename = tc.getExample();
+        const temp_example = try std.fs.path.join(allocator, &.{ temp_path, std.fs.path.basename(example_basename) });
+        defer allocator.free(temp_example);
+
+        const result = runTestRuntime(allocator, tc, temp_example);
         const category = tc.category();
 
         if (result.err) |err| {
@@ -104,6 +170,7 @@ pub fn main() !void {
     }
 
     try stdout.interface.print("roc {s}\n", .{roc_version});
+    try stdout.interface.print("bundle {s}\n", .{bundle_filename});
     try stdout.interface.print("\n", .{});
 
     // Category breakdown
@@ -200,6 +267,20 @@ const TestCase = struct {
             .roc_test => .roc_test,
         };
     }
+
+    fn getExample(self: TestCase) []const u8 {
+        return switch (self.kind) {
+            .check => |e| e,
+            .run => |e| e,
+            .run_with_stdin => |cfg| cfg.example,
+            .roc_test => |e| e,
+            .build_run => |e| e,
+            .build_run_exit => |cfg| cfg.example,
+            .build_run_stdin => |cfg| cfg.example,
+            .dbg_test_run => |e| e,
+            .dbg_test_build => |e| e,
+        };
+    }
 };
 
 const TestKind = union(enum) {
@@ -272,23 +353,23 @@ const test_cases = [_]TestCase{
 };
 
 /// Runtime version that catches errors and returns them in the result
-fn runTestRuntime(allocator: Allocator, tc: TestCase) TestResult {
-    return runTest(allocator, tc) catch |err| {
+fn runTestRuntime(allocator: Allocator, tc: TestCase, example_path: []const u8) TestResult {
+    return runTest(allocator, tc, example_path) catch |err| {
         return .{ .success = false, .err = err };
     };
 }
 
-fn runTest(allocator: Allocator, tc: TestCase) !TestResult {
+fn runTest(allocator: Allocator, tc: TestCase, example_path: []const u8) !TestResult {
     return switch (tc.kind) {
-        .check => |example| try runRocCheck(allocator, example),
-        .run => |example| try runRocRun(allocator, example, null),
-        .run_with_stdin => |cfg| try runRocRun(allocator, cfg.example, cfg.stdin),
-        .roc_test => |example| try runRocTest(allocator, example),
-        .build_run => |example| try runBuildAndRun(allocator, example, null, null),
-        .build_run_exit => |cfg| try runBuildAndRun(allocator, cfg.example, null, cfg.expected_exit),
-        .build_run_stdin => |cfg| try runBuildAndRun(allocator, cfg.example, cfg.stdin, null),
-        .dbg_test_run => |example| try runDbgTestRun(allocator, example),
-        .dbg_test_build => |example| try runDbgTestBuild(allocator, example),
+        .check => try runRocCheck(allocator, example_path),
+        .run => try runRocRun(allocator, example_path, null),
+        .run_with_stdin => |cfg| try runRocRun(allocator, example_path, cfg.stdin),
+        .roc_test => try runRocTest(allocator, example_path),
+        .build_run => try runBuildAndRun(allocator, example_path, null, null),
+        .build_run_exit => |cfg| try runBuildAndRun(allocator, example_path, null, cfg.expected_exit),
+        .build_run_stdin => |cfg| try runBuildAndRun(allocator, example_path, cfg.stdin, null),
+        .dbg_test_run => try runDbgTestRun(allocator, example_path),
+        .dbg_test_build => try runDbgTestBuild(allocator, example_path),
     };
 }
 
@@ -439,16 +520,20 @@ fn runCommand(allocator: Allocator, argv: []const []const u8, stdin_data: ?[]con
     }
 
     // Read stdout using readToEndAlloc
-    const stdout_data = if (child.stdout) |*pipe|
-        pipe.readToEndAlloc(allocator, 10 * 1024 * 1024) catch &.{}
+    // On error, allocate an empty slice so callers can safely free it
+    const stdout_data: []u8 = if (child.stdout) |*pipe|
+        pipe.readToEndAlloc(allocator, 10 * 1024 * 1024) catch try allocator.alloc(u8, 0)
     else
-        &.{};
+        try allocator.alloc(u8, 0);
+    errdefer allocator.free(stdout_data);
 
     // Read stderr using readToEndAlloc
-    const stderr_data = if (child.stderr) |*pipe|
-        pipe.readToEndAlloc(allocator, 10 * 1024 * 1024) catch &.{}
+    // On error, allocate an empty slice so callers can safely free it
+    const stderr_data: []u8 = if (child.stderr) |*pipe|
+        pipe.readToEndAlloc(allocator, 10 * 1024 * 1024) catch try allocator.alloc(u8, 0)
     else
-        &.{};
+        try allocator.alloc(u8, 0);
+    errdefer allocator.free(stderr_data);
 
     const term = try child.wait();
     const exit_code: u8 = switch (term) {
@@ -458,7 +543,162 @@ fn runCommand(allocator: Allocator, argv: []const []const u8, stdin_data: ?[]con
 
     return .{
         .exit_code = exit_code,
-        .stdout = @constCast(stdout_data),
-        .stderr = @constCast(stderr_data),
+        .stdout = stdout_data,
+        .stderr = stderr_data,
     };
+}
+
+// HTTP Server for serving the bundle file
+const ServerContext = struct {
+    allocator: Allocator,
+    bundle_filename: []const u8,
+    should_stop: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+};
+
+fn runHttpServer(ctx: *ServerContext) void {
+    const address = std.net.Address.initIp4(.{ 127, 0, 0, 1 }, SERVER_PORT);
+    var server = address.listen(.{ .reuse_address = true }) catch |err| {
+        std.debug.print("HTTP server failed to listen: {}\n", .{err});
+        return;
+    };
+    defer server.deinit();
+
+    // Set up poll to wait for connections with timeout
+    var poll_fds = [_]std.posix.pollfd{
+        .{
+            .fd = server.stream.handle,
+            .events = std.posix.POLL.IN,
+            .revents = 0,
+        },
+    };
+
+    const poll_timeout_ms = 100; // Check should_stop every 100ms
+
+    while (!ctx.should_stop.load(.acquire)) {
+        // Poll with timeout - allows periodic should_stop checks
+        const poll_result = std.posix.poll(&poll_fds, poll_timeout_ms) catch |err| {
+            std.debug.print("HTTP server poll error: {}\n", .{err});
+            continue;
+        };
+
+        // Timeout expired - no connections, loop back to check should_stop
+        if (poll_result == 0) {
+            continue;
+        }
+
+        // Connection ready - accept it
+        if (poll_fds[0].revents & std.posix.POLL.IN != 0) {
+            const conn = server.accept() catch |err| {
+                std.debug.print("HTTP server accept error: {}\n", .{err});
+                poll_fds[0].revents = 0;
+                continue;
+            };
+            defer conn.stream.close();
+
+            handleHttpRequest(ctx, conn.stream) catch |err| {
+                std.debug.print("HTTP request error: {}\n", .{err});
+            };
+        }
+
+        // Reset revents for next poll iteration
+        poll_fds[0].revents = 0;
+    }
+}
+
+fn handleHttpRequest(ctx: *ServerContext, stream: std.net.Stream) !void {
+    var buf: [4096]u8 = undefined;
+    const n = try stream.read(&buf);
+    if (n == 0) return;
+
+    const request = buf[0..n];
+
+    // Parse the requested path from "GET /path HTTP/1.1"
+    if (!std.mem.startsWith(u8, request, "GET /")) return;
+
+    const path_start = 5; // After "GET /"
+    const path_end = std.mem.indexOfPos(u8, request, path_start, " ") orelse return;
+    const requested_path = request[path_start..path_end];
+
+    // Only serve our bundle file
+    if (!std.mem.eql(u8, requested_path, ctx.bundle_filename)) {
+        const not_found = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+        _ = try stream.write(not_found);
+        return;
+    }
+
+    // Open and serve the bundle file
+    const file = std.fs.cwd().openFile(ctx.bundle_filename, .{}) catch {
+        const not_found = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+        _ = try stream.write(not_found);
+        return;
+    };
+    defer file.close();
+
+    const file_size = try file.getEndPos();
+
+    // Send HTTP response header
+    var header_buf: [256]u8 = undefined;
+    const header = try std.fmt.bufPrint(&header_buf, "HTTP/1.1 200 OK\r\nContent-Length: {d}\r\nContent-Type: application/octet-stream\r\n\r\n", .{file_size});
+    _ = try stream.write(header);
+
+    // Send file content
+    var file_buf: [65536]u8 = undefined;
+    while (true) {
+        const bytes_read = try file.read(&file_buf);
+        if (bytes_read == 0) break;
+        _ = try stream.write(file_buf[0..bytes_read]);
+    }
+}
+
+fn findBundleFile(allocator: Allocator) ![]const u8 {
+    var dir = try std.fs.cwd().openDir(".", .{ .iterate = true });
+    defer dir.close();
+
+    var found_bundle: ?[]const u8 = null;
+
+    var iter = dir.iterate();
+    while (try iter.next()) |entry| {
+        if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".tar.zst")) {
+            if (found_bundle != null) {
+                // Already found one bundle, so we have multiple - error out
+                allocator.free(found_bundle.?);
+                return error.MultipleBundlesFound;
+            }
+            found_bundle = try allocator.dupe(u8, entry.name);
+        }
+    }
+
+    return found_bundle orelse error.BundleNotFound;
+}
+
+fn prepareTestFiles(allocator: Allocator, temp_path: []const u8, bundle_url: []const u8) !void {
+    var examples_dir = try std.fs.cwd().openDir("examples", .{ .iterate = true });
+    defer examples_dir.close();
+
+    var iter = examples_dir.iterate();
+    while (try iter.next()) |entry| {
+        if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".roc")) {
+            // Read original file
+            const src_path = try std.fs.path.join(allocator, &.{ "examples", entry.name });
+            defer allocator.free(src_path);
+
+            const content = try std.fs.cwd().readFileAlloc(allocator, src_path, 1024 * 1024);
+            defer allocator.free(content);
+
+            // Replace platform path with bundle URL
+            const new_platform = try std.fmt.allocPrint(allocator, "\"{s}\"", .{bundle_url});
+            defer allocator.free(new_platform);
+
+            const new_content = try std.mem.replaceOwned(u8, allocator, content, "\"../platform/main.roc\"", new_platform);
+            defer allocator.free(new_content);
+
+            // Write to temp directory
+            const dest_path = try std.fs.path.join(allocator, &.{ temp_path, entry.name });
+            defer allocator.free(dest_path);
+
+            const dest_file = try std.fs.createFileAbsolute(dest_path, .{});
+            defer dest_file.close();
+            try dest_file.writeAll(new_content);
+        }
+    }
 }
