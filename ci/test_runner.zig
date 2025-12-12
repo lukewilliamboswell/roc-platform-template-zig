@@ -233,7 +233,7 @@ const TestKind = union(enum) {
 
 const test_cases = [_]TestCase{
     // roc check examples
-    .{ .name = "check hello.roc", .kind = .{ .check = "examples/hello.roc" } },
+    .{ .name = "check cli_args.roc", .kind = .{ .check = "examples/cli_args.roc" } },
     .{ .name = "check hello_world.roc", .kind = .{ .check = "examples/hello_world.roc" } },
     .{ .name = "check fizzbuzz.roc", .kind = .{ .check = "examples/fizzbuzz.roc" } },
     .{ .name = "check match.roc", .kind = .{ .check = "examples/match.roc" } },
@@ -244,9 +244,10 @@ const test_cases = [_]TestCase{
     .{ .name = "check echo_multiline.roc", .kind = .{ .check = "examples/echo_multiline.roc" } },
     .{ .name = "check tests.roc", .kind = .{ .check = "examples/tests.roc" } },
     .{ .name = "check dbg_test.roc", .kind = .{ .check = "examples/dbg_test.roc" } },
+    .{ .name = "check all_roc_syntax.roc", .kind = .{ .check = "examples/all_roc_syntax.roc" } },
 
     // roc run examples (interpreter mode)
-    .{ .name = "run hello.roc", .kind = .{ .run = "examples/hello.roc" } },
+    .{ .name = "run cli_args.roc", .kind = .{ .run = "examples/cli_args.roc" } },
     .{ .name = "run hello_world.roc", .kind = .{ .run = "examples/hello_world.roc" } },
     .{ .name = "run fizzbuzz.roc", .kind = .{ .run = "examples/fizzbuzz.roc" } },
     .{ .name = "run match.roc", .kind = .{ .run = "examples/match.roc" } },
@@ -255,12 +256,14 @@ const test_cases = [_]TestCase{
     .{ .name = "run echo.roc", .kind = .{ .run_with_stdin = .{ .example = "examples/echo.roc", .stdin = "yoo\n" } } },
     .{ .name = "run echo_multiline.roc", .kind = .{ .run_with_stdin = .{ .example = "examples/echo_multiline.roc", .stdin = "line one\nline two\nline three\n" } } },
     .{ .name = "run dbg_test.roc", .kind = .{ .dbg_test_run = "examples/dbg_test.roc" } },
+    .{ .name = "run all_roc_syntax.roc", .kind = .{ .run = "examples/all_roc_syntax.roc" } },
 
     // roc test
     .{ .name = "roc test tests.roc", .kind = .{ .roc_test = "examples/tests.roc" } },
+    .{ .name = "roc test all_roc_syntax.roc", .kind = .{ .roc_test = "examples/all_roc_syntax.roc" } },
 
     // Build and run examples
-    .{ .name = "build+run hello.roc", .kind = .{ .build_run = "examples/hello.roc" } },
+    .{ .name = "build+run cli_args.roc", .kind = .{ .build_run = "examples/cli_args.roc" } },
     .{ .name = "build+run hello_world.roc", .kind = .{ .build_run = "examples/hello_world.roc" } },
     .{ .name = "build+run fizzbuzz.roc", .kind = .{ .build_run = "examples/fizzbuzz.roc" } },
     .{ .name = "build+run match.roc", .kind = .{ .build_run = "examples/match.roc" } },
@@ -269,6 +272,7 @@ const test_cases = [_]TestCase{
     .{ .name = "build+run exit.roc (expect 23)", .kind = .{ .build_run_exit = .{ .example = "examples/exit.roc", .expected_exit = 23 } } },
     .{ .name = "build+run echo.roc", .kind = .{ .build_run_stdin = .{ .example = "examples/echo.roc", .stdin = "test input\n" } } },
     .{ .name = "build+run dbg_test.roc", .kind = .{ .dbg_test_build = "examples/dbg_test.roc" } },
+    .{ .name = "build+run all_roc_syntax.roc", .kind = .{ .build_run = "examples/all_roc_syntax.roc" } },
 };
 
 /// Runtime version that catches errors and returns them in the result

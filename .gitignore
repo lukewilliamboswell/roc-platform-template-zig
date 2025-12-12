@@ -4,6 +4,8 @@ examples/hello
 examples/exit_code_msg
 examples/exit_tag
 
+all_roc_syntax
+
 build
 app
 
