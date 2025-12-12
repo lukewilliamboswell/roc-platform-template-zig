@@ -13,17 +13,6 @@ Run examples with interpreter: `roc examples/<name>.roc`
 
 Build standalone executable: `roc build examples/<name>.roc`
 
-| Example | Features Demonstrated | Run |
-|---------|----------------------|-----|
-| `hello.roc` | Basic stdout, string interpolation | `roc examples/hello.roc` |
-| `exit.roc` | Exit codes with `Err(Exit(code))` | `roc examples/exit.roc` |
-| `echo.roc` | `Stdin.line!`, interactive I/O | `roc examples/echo.roc` |
-| `fizzbuzz.roc` | `while` loops, `var`/`$variables`, `match` | `roc examples/fizzbuzz.roc` |
-| `sum_fold.roc` | `fold`, `Str.concat`, `Str.join_with` | `roc examples/sum_fold.roc` |
-| `stderr.roc` | `Stderr.line!`, both output streams | `roc examples/stderr.roc` |
-| `match.roc` | `match` expressions on booleans | `roc examples/match.roc` |
-| `tests.roc` | `expect` keyword for testing | `roc test --verbose examples/tests.roc` |
-
 ## Building
 
 ```bash
