@@ -22,6 +22,8 @@ app
 *.rh
 *.rm
 
+.claude
+
 host/libhost.h
 
 zig-cache/

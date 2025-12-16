@@ -272,7 +272,8 @@ const test_cases = [_]TestCase{
     .{ .name = "build+run exit.roc (expect 23)", .kind = .{ .build_run_exit = .{ .example = "examples/exit.roc", .expected_exit = 23 } } },
     .{ .name = "build+run echo.roc", .kind = .{ .build_run_stdin = .{ .example = "examples/echo.roc", .stdin = "test input\n" } } },
     .{ .name = "build+run dbg_test.roc", .kind = .{ .dbg_test_build = "examples/dbg_test.roc" } },
-    .{ .name = "build+run all_roc_syntax.roc", .kind = .{ .build_run = "examples/all_roc_syntax.roc" } },
+    // Uncomment once the fix for https://github.com/roc-lang/roc/issues/8654 is merged
+    //.{ .name = "build+run all_roc_syntax.roc", .kind = .{ .build_run = "examples/all_roc_syntax.roc" } },
 };
 
 /// Runtime version that catches errors and returns them in the result

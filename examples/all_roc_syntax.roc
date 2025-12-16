@@ -130,7 +130,7 @@ print! = |something| {
 dbg_keyword = || {
 	foo = 42
 
-    # This platform returns exit code 1 when using dbg, so we comment it out for now.
+	# dbg sets exit code to 1 in this platform, so we comment it out for CI tests to pass.
 	# dbg foo
 
 	# This variation does not work yet:
@@ -147,24 +147,23 @@ if_demo = |num| {
 	two_line_if = 
 		if num == 2
 			"Two"
-				else
-					"NotTwo"
+		else
+			"NotTwo"
 
-	# thread 336429 panic
-	# with_curlies = 
-	#     if num == 5 {
-	#         "Five"
-	#     } else {
-	#         "NotFive"
-	#     }
+	with_curlies = 
+	    if num == 5 {
+	        "Five"
+	    } else {
+	        "NotFive"
+	    }
 
 	# else if
 	if num == 3
 		"Three"
-			else if num == 4
-				"Four"
-					else
-						one_line_if.concat(two_line_if)
+	else if num == 4
+		"Four"
+	else
+		one_line_if.concat(two_line_if).concat(with_curlies)
 }
 
 tuple_demo = 
@@ -175,16 +174,15 @@ tuple_demo =
 type_var : List(a) -> List(a)
 type_var = |lst| lst
 
-# TODO issue #8647
-# destructuring = || {
-#     tup = ("Roc", 1)
-#     (str, num) = tup
+destructuring = || {
+    tup = ("Roc", 1)
+    (str, num) = tup
 
-#     rec = { x: 1, y: str } # TODO implement tuple access with `.index` ?
-#     { x, y } = rec
+    rec = { x: 1, y: str } # TODO implement tuple access with `.index` ?
+    { x, y } = rec
 
-#     (str, num, x, y)
-# }
+    (str, num, x, y)
+}
 
 # TODO not sure if still planned for implementation
 # record_update = {
@@ -242,6 +240,12 @@ early_return = |arg| {
 	Str.count_utf8_bytes(first)
 }
 
+my_concat = Str.concat
+
+# If you want to define a function that works for any type that has a specific method, you can use `where`:
+stringify : a -> Str where [a.to_str : a -> Str]
+stringify = |value| value.to_str()
+
 main! = |_args| {
 	Stdout.line!("Hello, world!")
 	StdoutAlias.line!("Hello, world! (using alias)")
@@ -249,8 +253,12 @@ main! = |_args| {
 	Stdout.line!(Str.inspect(number_operators(10, 5)))
 	print!(boolean_operators(Bool.True, Bool.False))
 
-	# pizza operator (|>) is gone, we now have static dispatch instead:
+	# pizza operator (|>) is gone, we now have static dispatch instead.
+	# It allows you to call methods that are defined on the type (like `Animal.is_eq` above).
 	print!("One".concat(" Two"))
+
+	# If you want a very similar style for a function that is not defined on the type but is in scope, you can use `->`:
+	print!("Three"->my_concat(" Four"))
 
 	Stdout.line!(simple_match(Red))
 	print!(match_list_patterns([1, 10]))
@@ -276,12 +284,11 @@ main! = |_args| {
 
 	print!(type_var(["a", "b"]))
 
-	# print!(destructuring())
+	print!(destructuring())
 
 	# print!(record_update)
 
-	# TODO Roc crashed: Error evaluating: TypeMismatch
-	# print!({ x: 10, y: 20 }.x)
+	print!({ x: 10, y: 20 }.x)
 
 	print!(record_update_2({ name: "Alice", age: 30 }))
 
@@ -299,12 +306,14 @@ main! = |_args| {
 
 	print!(early_return(Bool.False))
 
+	print!(stringify(12345))
+
 	# TODO Stdout.line!(readme);
 
 	# Commented out so CI tests can pass
 	# crash "Avoid using crash in production software!"
 
-    Ok({})
+	Ok({})
 }
 
 # Top level expects only run when using `roc test file.roc`
