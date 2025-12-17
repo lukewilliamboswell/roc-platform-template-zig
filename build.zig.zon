@@ -5,10 +5,10 @@
     .dependencies = .{
         .roc = .{
             // If you change the url here, change e.g. a single digit in the hash, that will make zig show you the correct hash after running `zig build`.
-            .url = "git+https://github.com/roc-lang/roc#2937d644560bfc5d09fa1cad3d36acc93612f08a",
+            .url = "git+https://github.com/roc-lang/roc#49a7f536002965bb0e6c53bb82a1814f08340052",
             // After running `zig build`, Zig will provide the correct hash
             // which you should paste here to replace this placeholder
-            .hash = "roc-0.0.0-NAC9w4IFhQDF1sxq31E0IX4b6NEEhvQ--xJ-RJ3Vjvcw",
+            .hash = "roc-0.0.0-NAC9w-7vhQC7MudcZB29RgpMRABkoruyarLdUr5Nyh3s",
         },
     },
     .fingerprint = 0xb91745a94628a7e0,
