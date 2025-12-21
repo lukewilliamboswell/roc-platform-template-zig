@@ -184,7 +184,130 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
 const RocStr = builtins.str.RocStr;
 const RocList = builtins.list.RocList;
 
-/// Hosted function: Stderr.line! (index 0 - sorted alphabetically)
+/// Hosted function: Dir.delete! (index 0 - sorted alphabetically)
+/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
+/// Returns {} and takes Str as argument
+fn hostedDirCreate(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ops;
+    _ = ret_ptr;
+
+    // Arguments struct for single Str parameter
+    const Args = extern struct { str: RocStr };
+    const args: *Args = @ptrCast(@alignCast(args_ptr));
+
+    const dir_name = args.str.asSlice();
+    std.fs.cwd().makeDir(dir_name) catch |err| {
+        // TODO: Return error name in Try type instead of exiting
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll(@errorName(err)) catch {};
+        stderr.writeAll("\n") catch {};
+        std.process.exit(1);
+    };
+}
+
+/// Hosted function: Dir.delete! (index 1 - sorted alphabetically)
+/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
+/// Returns {} and takes Str as argument
+fn hostedDirDelete(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ops;
+    _ = ret_ptr;
+
+    // Arguments struct for single Str parameter
+    const Args = extern struct { str: RocStr };
+    const args: *Args = @ptrCast(@alignCast(args_ptr));
+
+    const dir_name = args.str.asSlice();
+    std.fs.cwd().deleteDir(dir_name) catch |err| {
+        // TODO: Return error name in Try type instead of exiting
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll(@errorName(err)) catch {};
+        stderr.writeAll("\n") catch {};
+        std.process.exit(1);
+    };
+}
+
+/// Hosted function: File.delete! (index 2 - sorted alphabetically)
+/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
+/// Returns {} and takes Str as argument
+fn hostedFileDelete(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ops;
+    _ = ret_ptr;
+
+    // Arguments struct for single Str parameter
+    const Args = extern struct { str: RocStr };
+    const args: *Args = @ptrCast(@alignCast(args_ptr));
+
+    const file_name = args.str.asSlice();
+    std.fs.cwd().deleteFile(file_name) catch |err| {
+        // TODO: Return error name in Try type instead of exiting
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll(@errorName(err)) catch {};
+        stderr.writeAll("\n") catch {};
+        std.process.exit(1);
+    };
+}
+
+/// Hosted function: File.read_utf8! (index 3 - sorted alphabetically)
+/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
+/// Returns Try(Str, Str) and takes Str as argument
+fn hostedFileReadUtf8(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    // Arguments struct for single Str parameter
+    const Args = extern struct { str: RocStr };
+    const args: *Args = @ptrCast(@alignCast(args_ptr));
+
+    const file_name = args.str.asSlice();
+
+    const file = std.fs.cwd().openFile(file_name, .{}) catch |err| {
+        // TODO: Return error name in Try type instead of exiting
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll(@errorName(err)) catch {};
+        stderr.writeAll("\n") catch {};
+        std.process.exit(1);
+        // std.os.exit(1);
+    };
+    defer file.close();
+
+    const contents = "TODO";
+
+    // Create RocStr from the read line - RocStr.init handles allocation internally
+    const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
+    result.* = RocStr.init(contents.ptr, contents.len, ops);
+}
+
+/// Hosted function: File.read_utf8! (index 4 - sorted alphabetically)
+/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
+/// Returns Try({}, Str) and takes Str, Str as arguments
+fn hostedFileWriteUtf8(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ops;
+    _ = ret_ptr;
+
+    // Arguments struct for 2 Str parameters
+    const Args = extern struct { file_name: RocStr, file_text: RocStr };
+    const args: *Args = @ptrCast(@alignCast(args_ptr));
+
+    const file_name = args.file_name.asSlice();
+    const file_text = args.file_text.asSlice();
+
+    const file = std.fs.cwd().createFile(file_name, .{}) catch |err| {
+        // TODO: Return error name in Try type instead of exiting
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll(@errorName(err)) catch {};
+        stderr.writeAll("\n") catch {};
+        std.process.exit(1);
+        // std.os.exit(1);
+    };
+    defer file.close();
+    file.writeAll(file_text) catch |err| {
+        // TODO: Return error name in Try type instead of exiting
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll(@errorName(err)) catch {};
+        stderr.writeAll("\n") catch {};
+        std.process.exit(1);
+        // std.os.exit(1);
+    };
+}
+
+/// Hosted function: Stderr.line! (index 5 - sorted alphabetically)
 /// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
 /// Returns {} and takes Str as argument
 fn hostedStderrLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
@@ -201,7 +324,7 @@ fn hostedStderrLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
     stderr.writeAll("\n") catch {};
 }
 
-/// Hosted function: Stdin.line! (index 1 - sorted alphabetically)
+/// Hosted function: Stdin.line! (index 6 - sorted alphabetically)
 /// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
 /// Returns Str and takes {} as argument
 fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
@@ -242,7 +365,7 @@ fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr
     result.* = RocStr.init(line.ptr, line.len, ops);
 }
 
-/// Hosted function: Stdout.line! (index 2 - sorted alphabetically)
+/// Hosted function: Stdout.line! (index 7 - sorted alphabetically)
 /// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
 /// Returns {} and takes Str as argument
 fn hostedStdoutLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
@@ -259,12 +382,17 @@ fn hostedStdoutLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
     stdout.writeAll("\n") catch {};
 }
 
-/// Array of hosted function pointers, sorted alphabetically by fully-qualified name
+/// Array of hosted function pointers, sorted alphabetically by fully-qualified name (EG: `File.read_utf8`)
 /// These correspond to the hosted functions defined in Stderr, Stdin, and Stdout Type Modules
 const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
-    hostedStderrLine, // Stderr.line! (index 0)
-    hostedStdinLine, // Stdin.line! (index 1)
-    hostedStdoutLine, // Stdout.line! (index 2)
+    hostedDirCreate, // Dir.create! (index 0)
+    hostedDirDelete, // Dir.delete! (index 1)
+    hostedFileDelete, // File.delete! (index 2)
+    hostedFileReadUtf8, // File.read_utf8! (index 3)
+    hostedFileWriteUtf8, // File.write_utf8! (index 4)
+    hostedStderrLine, // Stderr.line! (index 5)
+    hostedStdinLine, // Stdin.line! (index 6)
+    hostedStdoutLine, // Stdout.line! (index 7)
 };
 
 /// Platform host entrypoint
