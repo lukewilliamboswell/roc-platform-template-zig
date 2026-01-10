@@ -1,8 +1,11 @@
-app [main!] { pf: platform "../platform/main.roc" }
+app [Model, program] { rr: platform "../platform/main.roc" }
 
-import pf.Stdout
+Model : Str
 
-main! = |_args| {
-    Stdout.line!("Hello, World!")
-    Ok({})
-}
+program = { init!, render! }
+
+init! : () => Try(Model, [Exit(I64), ..])
+init! = || Ok("initial model")
+
+render! : Model => Try(Model, [Exit(I64), ..])
+render! = |prev| if (prev == "initial model") Ok("rendered model") else Err(ReceivedUnexpectedModel)

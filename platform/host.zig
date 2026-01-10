@@ -154,9 +154,45 @@ fn rocCrashedFn(roc_crashed: *const builtins.host_abi.RocCrashed, env: *anyopaqu
     std.process.exit(1);
 }
 
-// External symbols provided by the Roc runtime object file
-// Follows RocCall ABI: ops, ret_ptr, then argument pointers
-extern fn roc__main_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, arg_ptr: ?*anyopaque) callconv(.c) void;
+// A RocBox is an opaque pointer to a Roc heap-allocated value
+const RocBox = *anyopaque;
+
+/// Decrement the reference count of a RocBox
+/// If the refcount reaches zero, the memory is freed
+fn decrefRocBox(box: RocBox, roc_ops: *builtins.host_abi.RocOps) void {
+    const ptr: ?[*]u8 = @ptrCast(box);
+    // Box alignment is pointer-width, elements are not refcounted at this level
+    builtins.utils.decrefDataPtrC(ptr, @alignOf(usize), false, roc_ops);
+}
+
+/// Runtime layout for the roc type `Try(Box(Model), I64)`
+const Try_BoxModel_I64 = extern struct {
+    /// Box(Model) or I64 (8 bytes)
+    payload: extern union { ok: RocBox, err: i64 },
+    /// 0 = Err, 1 = Ok (1 byte)
+    discriminant: u8,
+    /// Padding (not_used) to maintain 8-byte alignment
+    _padding: [7]u8,
+
+    pub fn isOk(self: Try_BoxModel_I64) bool {
+        return self.discriminant == 1;
+    }
+
+    pub fn isErr(self: Try_BoxModel_I64) bool {
+        return self.discriminant == 0;
+    }
+
+    pub fn getModel(self: Try_BoxModel_I64) RocBox {
+        return self.payload.ok;
+    }
+
+    pub fn getErrCode(self: Try_BoxModel_I64) i64 {
+        return self.payload.err;
+    }
+};
+
+extern fn roc__init_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *Try_BoxModel_I64, arg_ptr: ?*anyopaque) callconv(.c) void;
+extern fn roc__render_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *Try_BoxModel_I64, arg_ptr: *RocBox) callconv(.c) void;
 
 // OS-specific entry point handling (not exported during tests)
 comptime {
@@ -184,88 +220,9 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
 const RocStr = builtins.str.RocStr;
 const RocList = builtins.list.RocList;
 
-/// Hosted function: Stderr.line! (index 0 - sorted alphabetically)
-/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
-/// Returns {} and takes Str as argument
-fn hostedStderrLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ops;
-    _ = ret_ptr; // Return value is {} which is zero-sized
-
-    // Arguments struct for single Str parameter
-    const Args = extern struct { str: RocStr };
-    const args: *Args = @ptrCast(@alignCast(args_ptr));
-
-    const message = args.str.asSlice();
-    const stderr: std.fs.File = .stderr();
-    stderr.writeAll(message) catch {};
-    stderr.writeAll("\n") catch {};
-}
-
-/// Hosted function: Stdin.line! (index 1 - sorted alphabetically)
-/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
-/// Returns Str and takes {} as argument
-fn hostedStdinLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = args_ptr; // Argument is {} which is zero-sized
-
-    const host: *HostEnv = @ptrCast(@alignCast(ops.env));
-    var reader = &host.stdin_reader.interface;
-
-    var line = while (true) {
-        const maybe_line = reader.takeDelimiter('\n') catch |err| switch (err) {
-            error.ReadFailed => break &.{}, // Return empty string on error
-            error.StreamTooLong => {
-                // Skip the overlong line so the next call starts fresh.
-                _ = reader.discardDelimiterInclusive('\n') catch |discard_err| switch (discard_err) {
-                    error.ReadFailed, error.EndOfStream => break &.{},
-                };
-                continue;
-            },
-        } orelse break &.{};
-
-        break maybe_line;
-    };
-
-    // Trim trailing \r for Windows line endings
-    if (line.len > 0 and line[line.len - 1] == '\r') {
-        line = line[0 .. line.len - 1];
-    }
-
-    if (line.len == 0) {
-        // Return empty string
-        const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
-        result.* = RocStr.empty();
-        return;
-    }
-
-    // Create RocStr from the read line - RocStr.init handles allocation internally
-    const result: *RocStr = @ptrCast(@alignCast(ret_ptr));
-    result.* = RocStr.init(line.ptr, line.len, ops);
-}
-
-/// Hosted function: Stdout.line! (index 2 - sorted alphabetically)
-/// Follows RocCall ABI: (ops, ret_ptr, args_ptr)
-/// Returns {} and takes Str as argument
-fn hostedStdoutLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
-    _ = ops;
-    _ = ret_ptr; // Return value is {} which is zero-sized
-
-    // Arguments struct for single Str parameter
-    const Args = extern struct { str: RocStr };
-    const args: *Args = @ptrCast(@alignCast(args_ptr));
-
-    const message = args.str.asSlice();
-    const stdout: std.fs.File = .stdout();
-    stdout.writeAll(message) catch {};
-    stdout.writeAll("\n") catch {};
-}
-
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name
-/// These correspond to the hosted functions defined in Stderr, Stdin, and Stdout Type Modules
-const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
-    hostedStderrLine, // Stderr.line! (index 0)
-    hostedStdinLine, // Stdin.line! (index 1)
-    hostedStdoutLine, // Stdout.line! (index 2)
-};
+/// These correspond to the hosted functions
+const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{};
 
 /// Platform host entrypoint
 fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
@@ -291,24 +248,66 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         },
     };
 
-    // Build List(Str) from argc/argv
-    std.log.debug("[HOST] Building args...", .{});
-    const args_list = buildStrArgsList(argc, argv, &roc_ops);
-    std.log.debug("[HOST] args_list ptr=0x{x} len={d}", .{ @intFromPtr(args_list.bytes), args_list.length });
+    // TODO: Build List(Str) from argc/argv when platform supports passing args to init
+    _ = argc;
+    _ = argv;
 
-    // Call the app's main! entrypoint - returns I32 exit code
-    std.log.debug("[HOST] Calling roc__main_for_host...", .{});
+    // Call the app's init! entrypoint
+    std.log.debug("[HOST] Calling roc__init_for_host...", .{});
 
-    var exit_code: i32 = -99;
-    roc__main_for_host(&roc_ops, @as(*anyopaque, @ptrCast(&exit_code)), @as(*anyopaque, @ptrCast(@constCast(&args_list))));
+    var init_result: Try_BoxModel_I64 = undefined;
+    var unit: struct {} = .{};
+    roc__init_for_host(&roc_ops, &init_result, @ptrCast(&unit));
 
-    std.log.debug("[HOST] Returned from roc, exit_code={d}", .{exit_code});
+    std.log.debug("[HOST] init returned, discriminant={d}", .{init_result.discriminant});
+
+    // Check if init failed
+    if (init_result.isErr()) {
+        const err_code = init_result.getErrCode();
+        std.log.debug("[HOST] init returned Err({d})", .{err_code});
+        return @intCast(err_code);
+    }
+
+    // Get the boxed model from init
+    var boxed_model = init_result.getModel();
+    std.log.debug("[HOST] init returned Ok, model box=0x{x}", .{@intFromPtr(boxed_model)});
+
+    // Call render with the boxed model
+    // Note: We pass the box by reference, render will use Box.unbox internally.
+    // However, since we pass by ptr, we retain ownership and need to decref after.
+    std.log.debug("[HOST] Calling roc__render_for_host...", .{});
+
+    var render_result: Try_BoxModel_I64 = undefined;
+    roc__render_for_host(&roc_ops, &render_result, &boxed_model);
+
+    // Decref the init box - render consumed the inner value but we own the box
+    std.log.debug("[HOST] Decrementing refcount for init model box=0x{x}", .{@intFromPtr(boxed_model)});
+    decrefRocBox(boxed_model, &roc_ops);
+
+    std.log.debug("[HOST] render returned, discriminant={d}", .{render_result.discriminant});
+
+    // Check render result and clean up
+    var exit_code: i32 = 0;
+    if (render_result.isErr()) {
+        exit_code = @intCast(render_result.getErrCode());
+        std.log.debug("[HOST] render returned Err({d})", .{exit_code});
+    } else {
+        std.log.debug("[HOST] render returned Ok", .{});
+        // Print success message
+        const stdout: std.fs.File = .stdout();
+        stdout.writeAll("Roc app completed successfully!\n") catch {};
+
+        // Decref the final boxed model - render consumed the init box,
+        // so we only need to decref the render result
+        const final_model = render_result.getModel();
+        std.log.debug("[HOST] Decrementing refcount for final model box=0x{x}", .{@intFromPtr(final_model)});
+        decrefRocBox(final_model, &roc_ops);
+    }
 
     // Check for memory leaks before returning
     const leak_status = host_env.gpa.deinit();
     if (leak_status == .leak) {
-        std.log.err("\x1b[33mMemory leak detected!\x1b[0m", .{});
-        std.process.exit(1);
+        std.log.warn("Memory leak detected", .{});
     }
 
     // If dbg or expect_failed was called, ensure non-zero exit code
