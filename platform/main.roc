@@ -5,7 +5,7 @@ platform ""
 			render! : model => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes [Draw]
+	exposes [Draw, Color]
 	packages {}
 	provides {
 		init_for_host!: "init_for_host",
@@ -20,6 +20,7 @@ platform ""
 	}
 
 import Draw
+import Color
 
 init_for_host! : {} => Try(Box(Model), I64)
 init_for_host! = |{}| match (program.init!)() {

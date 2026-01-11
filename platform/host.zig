@@ -3,6 +3,9 @@ const std = @import("std");
 const builtins = @import("builtins");
 const rl = @import("raylib");
 
+const TRACE_ALLOCATIONS = false;
+const TRACE_HOST = false;
+
 /// Global flag to track if dbg or expect_failed was called.
 /// If set, program exits with non-zero code to prevent accidental commits.
 var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
@@ -41,12 +44,16 @@ fn rocAllocFn(roc_alloc: *builtins.host_abi.RocAlloc, env: *anyopaque) callconv(
     // Return pointer to the user data (after the size metadata)
     roc_alloc.answer = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
 
-    std.log.debug("[ALLOC] ptr=0x{x} size={d} align={d}", .{ @intFromPtr(roc_alloc.answer), roc_alloc.length, roc_alloc.alignment });
+    if (TRACE_ALLOCATIONS) {
+        std.log.debug("[ALLOC] ptr=0x{x} size={d} align={d}", .{ @intFromPtr(roc_alloc.answer), roc_alloc.length, roc_alloc.alignment });
+    }
 }
 
 /// Roc deallocation function with size-tracking metadata
 fn rocDeallocFn(roc_dealloc: *builtins.host_abi.RocDealloc, env: *anyopaque) callconv(.c) void {
-    std.log.debug("[DEALLOC] ptr=0x{x} align={d}", .{ @intFromPtr(roc_dealloc.ptr), roc_dealloc.alignment });
+    if (TRACE_ALLOCATIONS) {
+        std.log.debug("[DEALLOC] ptr=0x{x} align={d}", .{ @intFromPtr(roc_dealloc.ptr), roc_dealloc.alignment });
+    }
 
     const host: *HostEnv = @ptrCast(@alignCast(env));
     const allocator = host.gpa.allocator();
@@ -117,7 +124,9 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
     // Return pointer to the user data (after the size metadata)
     roc_realloc.answer = new_user_ptr;
 
-    std.log.debug("[REALLOC] old=0x{x} new=0x{x} new_size={d}", .{ @intFromPtr(roc_realloc.answer), @intFromPtr(new_user_ptr), roc_realloc.new_length });
+    if (TRACE_ALLOCATIONS) {
+        std.log.debug("[REALLOC] old=0x{x} new=0x{x} new_size={d}", .{ @intFromPtr(roc_realloc.answer), @intFromPtr(new_user_ptr), roc_realloc.new_length });
+    }
 }
 
 /// Roc debug function
@@ -221,13 +230,45 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
 const RocStr = builtins.str.RocStr;
 const RocList = builtins.list.RocList;
 
-/// Roc Rectangle type layout
+/// Roc Vector2 type layout: { x: F32, y: F32 }
+/// Fields ordered by alignment then alphabetically: x, y
+const RocVector2 = extern struct {
+    x: f32,
+    y: f32,
+};
+
+/// Roc Rectangle type layout: { x, y, width, height: F32, color: Color }
 /// Fields ordered by alignment (4 bytes for F32) then alphabetically, then 1-byte fields
 const RocRectangle = extern struct {
     height: f32,
     width: f32,
     x: f32,
     y: f32,
+    color: u8,
+};
+
+/// Roc Circle type layout: { center: Vector2, radius: F32, color: Color }
+/// Fields ordered by alignment then alphabetically: center, radius, color
+const RocCircle = extern struct {
+    center: RocVector2,
+    radius: f32,
+    color: u8,
+};
+
+/// Roc Line type layout: { start: Vector2, end: Vector2, color: Color }
+/// Fields ordered by alignment then alphabetically: end, start, color
+const RocLine = extern struct {
+    end: RocVector2,
+    start: RocVector2,
+    color: u8,
+};
+
+/// Roc Text type layout: { pos: Vector2, text: Str, size: I32, color: Color }
+/// Fields ordered by alignment then alphabetically: text (8), pos (4), size (4), color (1)
+const RocText = extern struct {
+    text: RocStr,
+    pos: RocVector2,
+    size: i32,
     color: u8,
 };
 
@@ -261,7 +302,20 @@ fn hostedDrawBeginFrame(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, arg
     rl.beginDrawing();
 }
 
-/// Hosted function: Draw.clear! (index 1 alphabetically)
+/// Hosted function: Draw.circle! (index 1 alphabetically)
+fn hostedDrawCircle(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ops;
+    _ = ret_ptr;
+    const circle: *const RocCircle = @ptrCast(@alignCast(args_ptr));
+    rl.drawCircle(
+        @intFromFloat(circle.center.x),
+        @intFromFloat(circle.center.y),
+        circle.radius,
+        rocColorToRaylib(circle.color),
+    );
+}
+
+/// Hosted function: Draw.clear! (index 2 alphabetically)
 fn hostedDrawClear(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ops;
     _ = ret_ptr;
@@ -269,7 +323,7 @@ fn hostedDrawClear(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr
     rl.clearBackground(rocColorToRaylib(color_discriminant.*));
 }
 
-/// Hosted function: Draw.end_frame! (index 2 alphabetically)
+/// Hosted function: Draw.end_frame! (index 3 alphabetically)
 fn hostedDrawEndFrame(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ops;
     _ = ret_ptr;
@@ -277,7 +331,21 @@ fn hostedDrawEndFrame(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_
     rl.endDrawing();
 }
 
-/// Hosted function: Draw.rectangle! (index 3 alphabetically)
+/// Hosted function: Draw.line! (index 4 alphabetically)
+fn hostedDrawLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ops;
+    _ = ret_ptr;
+    const line: *const RocLine = @ptrCast(@alignCast(args_ptr));
+    rl.drawLine(
+        @intFromFloat(line.start.x),
+        @intFromFloat(line.start.y),
+        @intFromFloat(line.end.x),
+        @intFromFloat(line.end.y),
+        rocColorToRaylib(line.color),
+    );
+}
+
+/// Hosted function: Draw.rectangle! (index 5 alphabetically)
 fn hostedDrawRectangle(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ops;
     _ = ret_ptr;
@@ -291,13 +359,31 @@ fn hostedDrawRectangle(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args
     );
 }
 
+/// Hosted function: Draw.text! (index 6 alphabetically)
+fn hostedDrawText(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ops;
+    _ = ret_ptr;
+    const txt: *const RocText = @ptrCast(@alignCast(args_ptr));
+    const text_slice = txt.text.asSlice();
+    // raylib expects null-terminated string, use stack buffer for small strings
+    var buf: [256:0]u8 = undefined;
+    if (text_slice.len < buf.len) {
+        @memcpy(buf[0..text_slice.len], text_slice);
+        buf[text_slice.len] = 0;
+        rl.drawText(buf[0..text_slice.len :0], @intFromFloat(txt.pos.x), @intFromFloat(txt.pos.y), txt.size, rocColorToRaylib(txt.color));
+    }
+}
+
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name
-/// Order: Draw.begin_frame!, Draw.clear!, Draw.end_frame!, Draw.rectangle!
+/// Order: begin_frame!, circle!, clear!, end_frame!, line!, rectangle!, text!
 const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
-    hostedDrawBeginFrame, // Draw.begin_frame!
-    hostedDrawClear, // Draw.clear!
-    hostedDrawEndFrame, // Draw.end_frame!
-    hostedDrawRectangle, // Draw.rectangle!
+    hostedDrawBeginFrame, // Draw.begin_frame! (0)
+    hostedDrawCircle, // Draw.circle! (1)
+    hostedDrawClear, // Draw.clear! (2)
+    hostedDrawEndFrame, // Draw.end_frame! (3)
+    hostedDrawLine, // Draw.line! (4)
+    hostedDrawRectangle, // Draw.rectangle! (5)
+    hostedDrawText, // Draw.text! (6)
 };
 
 /// Platform host entrypoint
@@ -336,25 +422,33 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
 
     rl.setTargetFPS(60);
 
-    // Call the app's init! entrypoint
-    std.log.debug("[HOST] Calling roc__init_for_host...", .{});
+    if (TRACE_HOST) {
+        // Call the app's init! entrypoint
+        std.log.debug("[HOST] Calling roc__init_for_host...", .{});
+    }
 
     var init_result: Try_BoxModel_I64 = undefined;
     var unit: struct {} = .{};
     roc__init_for_host(&roc_ops, &init_result, @ptrCast(&unit));
 
-    std.log.debug("[HOST] init returned, discriminant={d}", .{init_result.discriminant});
+    if (TRACE_HOST) {
+        std.log.debug("[HOST] init returned, discriminant={d}", .{init_result.discriminant});
+    }
 
     // Check if init failed
     if (init_result.isErr()) {
         const err_code = init_result.getErrCode();
-        std.log.debug("[HOST] init returned Err({d})", .{err_code});
+        if (TRACE_HOST) {
+            std.log.debug("[HOST] init returned Err({d})", .{err_code});
+        }
         return @intCast(err_code);
     }
 
     // Get the boxed model from init
     var boxed_model = init_result.getModel();
-    std.log.debug("[HOST] init returned Ok, model box=0x{x}", .{@intFromPtr(boxed_model)});
+    if (TRACE_HOST) {
+        std.log.debug("[HOST] init returned Ok, model box=0x{x}", .{@intFromPtr(boxed_model)});
+    }
 
     // Main render loop
     var exit_code: i32 = 0;
@@ -366,7 +460,9 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         // Check render result
         if (render_result.isErr()) {
             exit_code = @intCast(render_result.getErrCode());
-            std.log.debug("[HOST] render returned Err({d})", .{exit_code});
+            if (TRACE_HOST) {
+                std.log.debug("[HOST] render returned Err({d})", .{exit_code});
+            }
             break;
         }
 
@@ -378,7 +474,9 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
 
     // Clean up final model
     if (exit_code == 0) {
-        std.log.debug("[HOST] Decrementing refcount for final model box=0x{x}", .{@intFromPtr(boxed_model)});
+        if (TRACE_HOST) {
+            std.log.debug("[HOST] Decrementing refcount for final model box=0x{x}", .{@intFromPtr(boxed_model)});
+        }
         decrefRocBox(boxed_model, &roc_ops);
     }
 
