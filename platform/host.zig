@@ -273,16 +273,12 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     std.log.debug("[HOST] init returned Ok, model box=0x{x}", .{@intFromPtr(boxed_model)});
 
     // Call render with the boxed model
-    // Note: We pass the box by reference, render will use Box.unbox internally.
-    // However, since we pass by ptr, we retain ownership and need to decref after.
+    // Roc's render_for_host! will call Box.unbox which consumes the box
     std.log.debug("[HOST] Calling roc__render_for_host...", .{});
 
     var render_result: Try_BoxModel_I64 = undefined;
     roc__render_for_host(&roc_ops, &render_result, &boxed_model);
-
-    // Decref the init box - render consumed the inner value but we own the box
-    std.log.debug("[HOST] Decrementing refcount for init model box=0x{x}", .{@intFromPtr(boxed_model)});
-    decrefRocBox(boxed_model, &roc_ops);
+    // Note: Roc's Box.unbox in render_for_host! consumes the init box
 
     std.log.debug("[HOST] render returned, discriminant={d}", .{render_result.discriminant});
 
