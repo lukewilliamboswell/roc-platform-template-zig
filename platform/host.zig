@@ -201,8 +201,14 @@ const Try_BoxModel_I64 = extern struct {
     }
 };
 
+/// Roc PlatformStateFromHost type layout: { frame_count: U64 }
+/// Simple C-compatible struct passed from host to Roc on each render
+const RocPlatformState = extern struct {
+    frame_count: u64,
+};
+
 extern fn roc__init_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *Try_BoxModel_I64, arg_ptr: ?*anyopaque) callconv(.c) void;
-extern fn roc__render_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *Try_BoxModel_I64, arg_ptr: *RocBox) callconv(.c) void;
+extern fn roc__render_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *Try_BoxModel_I64, model_ptr: *RocBox, state_ptr: *RocPlatformState) callconv(.c) void;
 
 // OS-specific entry point handling (not exported during tests)
 comptime {
@@ -452,10 +458,16 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
 
     // Main render loop
     var exit_code: i32 = 0;
+    var frame_count: u64 = 0;
     while (!rl.windowShouldClose()) {
-        // Call render with the boxed model
+        // Build platform state for this frame
+        var platform_state = RocPlatformState{
+            .frame_count = frame_count,
+        };
+
+        // Call render with the boxed model and platform state
         var render_result: Try_BoxModel_I64 = undefined;
-        roc__render_for_host(&roc_ops, &render_result, &boxed_model);
+        roc__render_for_host(&roc_ops, &render_result, &boxed_model, &platform_state);
 
         // Check render result
         if (render_result.isErr()) {
@@ -468,6 +480,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
 
         // Update boxed_model for next iteration
         boxed_model = render_result.getModel();
+        frame_count += 1;
 
         // Drawing is now handled by the Roc app via Draw effects
     }
