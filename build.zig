@@ -44,13 +44,10 @@ const RocTarget = enum {
 };
 
 /// All cross-compilation targets for `zig build`
+/// Note: Linux targets require X11 sysroot, Windows requires mingw - currently macOS only
 const all_targets = [_]RocTarget{
     .x64mac,
-    .x64win,
-    .x64musl,
     .arm64mac,
-    .arm64win,
-    .arm64musl,
 };
 
 pub fn build(b: *std.Build) void {
@@ -251,6 +248,17 @@ fn buildHostLib(
             },
         }),
     });
+
+    // For macOS cross-compilation, add framework paths from our bundled sysroot
+    if (target.result.os.tag == .macos) {
+        const sysroot_frameworks = b.path("platform/targets/macos-sysroot/System/Library/Frameworks");
+        const sysroot_lib = b.path("platform/targets/macos-sysroot/usr/lib");
+        host_lib.root_module.addSystemFrameworkPath(sysroot_frameworks);
+        host_lib.root_module.addLibraryPath(sysroot_lib);
+        // Also add to raylib artifact
+        raylib_artifact.root_module.addSystemFrameworkPath(sysroot_frameworks);
+        raylib_artifact.root_module.addLibraryPath(sysroot_lib);
+    }
 
     // Link raylib into the host library
     host_lib.linkLibrary(raylib_artifact);

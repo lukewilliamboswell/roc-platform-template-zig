@@ -14,6 +14,7 @@ platform ""
 	targets: {
 		files: "targets/",
 		exe: {
+			x64mac: ["libhost.a", "libraylib.a", app],
 			arm64mac: ["libhost.a", "libraylib.a", app],
 		}
 	}
