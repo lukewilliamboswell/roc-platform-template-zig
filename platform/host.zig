@@ -221,9 +221,84 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
 const RocStr = builtins.str.RocStr;
 const RocList = builtins.list.RocList;
 
+/// Roc Rectangle type layout
+/// Fields ordered by alignment (4 bytes for F32) then alphabetically, then 1-byte fields
+const RocRectangle = extern struct {
+    height: f32,
+    width: f32,
+    x: f32,
+    y: f32,
+    color: u8,
+};
+
+/// Convert Roc Color tag union discriminant to raylib Color
+/// Tags sorted alphabetically: Black=0, Blue=1, DarkGray=2, Gray=3, Green=4,
+/// LightGray=5, Orange=6, Pink=7, Purple=8, RayWhite=9, Red=10, White=11, Yellow=12
+fn rocColorToRaylib(discriminant: u8) rl.Color {
+    return switch (discriminant) {
+        0 => rl.Color.black,
+        1 => rl.Color.blue,
+        2 => rl.Color.dark_gray,
+        3 => rl.Color.gray,
+        4 => rl.Color.green,
+        5 => rl.Color.light_gray,
+        6 => rl.Color.orange,
+        7 => rl.Color.pink,
+        8 => rl.Color.purple,
+        9 => rl.Color.ray_white,
+        10 => rl.Color.red,
+        11 => rl.Color.white,
+        12 => rl.Color.yellow,
+        else => rl.Color.magenta, // Error fallback
+    };
+}
+
+/// Hosted function: Draw.begin_frame! (index 0 alphabetically)
+fn hostedDrawBeginFrame(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ops;
+    _ = ret_ptr;
+    _ = args_ptr;
+    rl.beginDrawing();
+}
+
+/// Hosted function: Draw.clear! (index 1 alphabetically)
+fn hostedDrawClear(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ops;
+    _ = ret_ptr;
+    const color_discriminant: *const u8 = @ptrCast(args_ptr);
+    rl.clearBackground(rocColorToRaylib(color_discriminant.*));
+}
+
+/// Hosted function: Draw.end_frame! (index 2 alphabetically)
+fn hostedDrawEndFrame(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ops;
+    _ = ret_ptr;
+    _ = args_ptr;
+    rl.endDrawing();
+}
+
+/// Hosted function: Draw.rectangle! (index 3 alphabetically)
+fn hostedDrawRectangle(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+    _ = ops;
+    _ = ret_ptr;
+    const rect: *const RocRectangle = @ptrCast(@alignCast(args_ptr));
+    rl.drawRectangle(
+        @intFromFloat(rect.x),
+        @intFromFloat(rect.y),
+        @intFromFloat(rect.width),
+        @intFromFloat(rect.height),
+        rocColorToRaylib(rect.color),
+    );
+}
+
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name
-/// These correspond to the hosted functions
-const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{};
+/// Order: Draw.begin_frame!, Draw.clear!, Draw.end_frame!, Draw.rectangle!
+const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
+    hostedDrawBeginFrame, // Draw.begin_frame!
+    hostedDrawClear, // Draw.clear!
+    hostedDrawEndFrame, // Draw.end_frame!
+    hostedDrawRectangle, // Draw.rectangle!
+};
 
 /// Platform host entrypoint
 fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
@@ -298,12 +373,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         // Update boxed_model for next iteration
         boxed_model = render_result.getModel();
 
-        // Draw frame
-        rl.beginDrawing();
-        rl.clearBackground(rl.Color.ray_white);
-        rl.drawText("Roc + Raylib!", 350, 280, 20, rl.Color.light_gray);
-        rl.drawFPS(10, 10);
-        rl.endDrawing();
+        // Drawing is now handled by the Roc app via Draw effects
     }
 
     // Clean up final model

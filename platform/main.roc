@@ -5,7 +5,7 @@ platform ""
 			render! : model => Try(model, [Exit(I64), ..]),
 		}
 	}
-	exposes []
+	exposes [Draw]
 	packages {}
 	provides {
 		init_for_host!: "init_for_host",
@@ -18,6 +18,8 @@ platform ""
 			arm64mac: ["libhost.a", "libraylib.a", app],
 		}
 	}
+
+import Draw
 
 init_for_host! : {} => Try(Box(Model), I64)
 init_for_host! = |{}| match (program.init!)() {
