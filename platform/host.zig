@@ -201,14 +201,26 @@ const Try_BoxModel_I64 = extern struct {
     }
 };
 
-/// Roc PlatformStateFromHost type layout: { frame_count: U64 }
-/// Simple C-compatible struct passed from host to Roc on each render
+/// Roc PlatformStateFromHost type layout (alignment desc, then alphabetical)
 const RocPlatformState = extern struct {
-    frame_count: u64,
+    frame_count: u64, // @0 (align 8)
+    mouse_wheel: f32, // @8 (align 4, "wheel" < "x" < "y")
+    mouse_x: f32, // @12
+    mouse_y: f32, // @16
+    mouse_left: bool, // @20 (align 1, "left" < "middle" < "right")
+    mouse_middle: bool, // @21
+    mouse_right: bool, // @22
+};
+
+/// Args tuple for render_for_host! : Box(Model), PlatformStateFromHost => ...
+/// Per RocCall ABI, all args are passed as a single pointer to a tuple struct
+const RenderArgs = extern struct {
+    model: RocBox,
+    state: RocPlatformState,
 };
 
 extern fn roc__init_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *Try_BoxModel_I64, arg_ptr: ?*anyopaque) callconv(.c) void;
-extern fn roc__render_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *Try_BoxModel_I64, model_ptr: *RocBox, state_ptr: *RocPlatformState) callconv(.c) void;
+extern fn roc__render_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *Try_BoxModel_I64, args_ptr: *RenderArgs) callconv(.c) void;
 
 // OS-specific entry point handling (not exported during tests)
 comptime {
@@ -381,7 +393,7 @@ fn hostedDrawText(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr:
 }
 
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name
-/// Order: begin_frame!, circle!, clear!, end_frame!, line!, rectangle!, text!
+/// Order: Draw.begin_frame!, Draw.circle!, Draw.clear!, Draw.end_frame!, Draw.line!, Draw.rectangle!, Draw.text!
 const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
     hostedDrawBeginFrame, // Draw.begin_frame! (0)
     hostedDrawCircle, // Draw.circle! (1)
@@ -461,13 +473,37 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     var frame_count: u64 = 0;
     while (!rl.windowShouldClose()) {
         // Build platform state for this frame
-        var platform_state = RocPlatformState{
+        const mouse_pos = rl.getMousePosition();
+        const platform_state = RocPlatformState{
             .frame_count = frame_count,
+            .mouse_left = rl.isMouseButtonDown(.left),
+            .mouse_middle = rl.isMouseButtonDown(.middle),
+            .mouse_right = rl.isMouseButtonDown(.right),
+            .mouse_wheel = rl.getMouseWheelMove(),
+            .mouse_x = mouse_pos.x,
+            .mouse_y = mouse_pos.y,
         };
 
+        if (TRACE_HOST and frame_count % 60 == 0) {
+            const dbg_stderr: std.fs.File = .stderr();
+            var buf: [256]u8 = undefined;
+            const msg = std.fmt.bufPrint(&buf, "[HOST] frame={d} mouse=({d:.1}, {d:.1}) left={}\n", .{
+                frame_count,
+                platform_state.mouse_x,
+                platform_state.mouse_y,
+                platform_state.mouse_left,
+            }) catch "[HOST] print error\n";
+            dbg_stderr.writeAll(msg) catch {};
+        }
+
         // Call render with the boxed model and platform state
+        // Per RocCall ABI, args are passed as a single pointer to a tuple struct
+        var render_args = RenderArgs{
+            .model = boxed_model,
+            .state = platform_state,
+        };
         var render_result: Try_BoxModel_I64 = undefined;
-        roc__render_for_host(&roc_ops, &render_result, &boxed_model, &platform_state);
+        roc__render_for_host(&roc_ops, &render_result, &render_args);
 
         // Check render result
         if (render_result.isErr()) {

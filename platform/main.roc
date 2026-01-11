@@ -23,9 +23,15 @@ import Draw
 import Color
 import PlatformState
 
-## Internal type for host boundary - kept simple for C compatibility
+## Internal type for host boundary - kept simple/flat for C compatibility
 PlatformStateFromHost : {
 	frame_count : U64,
+	mouse_wheel : F32,
+	mouse_x : F32,
+	mouse_y : F32,
+	mouse_left : Bool,
+	mouse_right : Bool,
+	mouse_middle : Bool,
 }
 
 init_for_host! : {} => Try(Box(Model), I64)
@@ -40,6 +46,14 @@ render_for_host! = |boxed_model, host_state| {
 	platform_state : PlatformState
 	platform_state = {
 		frame_count: host_state.frame_count,
+		mouse: {
+			x: host_state.mouse_x,
+			y: host_state.mouse_y,
+			left: host_state.mouse_left,
+			right: host_state.mouse_right,
+			middle: host_state.mouse_middle,
+			wheel: host_state.mouse_wheel,
+		},
 	}
 	match (program.render!)(Box.unbox(boxed_model), platform_state) {
 		Ok(unboxed_model) => Ok(Box.box(unboxed_model))

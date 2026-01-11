@@ -16,14 +16,17 @@ init! = || Ok({
 
 render! : Model, PlatformState => Try(Model, [Exit(I64), ..])
 render! = |model, state| {
-    # Animate rectangle position using frame count, wrap at 800 pixels
-    rect_x = (state.frame_count % 800).to_f32()
+
+    # Circle follows the mouse, changes color when clicked
+    circle_color = if state.mouse.left { Color.Red } else { Color.Green }
 
     Draw.draw!(RayWhite, || {
         Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 30, color: Color.DarkGray })
-        Draw.rectangle!({ x: rect_x, y: 200, width: 100, height: 80, color: Color.Red })
-        Draw.circle!({ center: { x: 500, y: 400 }, radius: 50, color: Color.Green })
+        Draw.rectangle!({ x: 100, y: 200, width: 100, height: 80, color: Color.Red })
         Draw.line!({ start: { x: 100, y: 500 }, end: { x: 600, y: 550 }, color: Color.Blue })
+
+        # Draw circle last so it is drawn over the top of other shapes
+        Draw.circle!({ center: { x: state.mouse.x, y: state.mouse.y }, radius: 50, color: circle_color })
     })
 
     Ok(model)
