@@ -4,6 +4,9 @@ examples/hello
 examples/exit_code_msg
 examples/exit_tag
 
+# Built executables at root
+hello_world
+
 all_roc_syntax
 
 build

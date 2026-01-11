@@ -15,6 +15,17 @@ for lib in targets/*/*.a targets/*/*.o targets/*/*.lib; do
     fi
 done
 
-echo "Bundling ${#roc_files[@]} .roc files and ${#lib_files[@]} library files..."
+# Collect all TBD files from macos-sysroot (for cross-compilation)
+sysroot_files=()
+if [[ -d "targets/macos-sysroot" ]]; then
+    while IFS= read -r -d '' tbd; do
+        sysroot_files+=("$tbd")
+    done < <(find targets/macos-sysroot -name "*.tbd" -print0)
+fi
 
-roc bundle "${roc_files[@]}" "${lib_files[@]}" --output-dir "$root_dir" "$@"
+echo "Bundling:"
+echo "  - ${#roc_files[@]} .roc files"
+echo "  - ${#lib_files[@]} library files"
+echo "  - ${#sysroot_files[@]} sysroot TBD files"
+
+roc bundle "${roc_files[@]}" "${lib_files[@]}" "${sysroot_files[@]}" --output-dir "$root_dir" "$@"
