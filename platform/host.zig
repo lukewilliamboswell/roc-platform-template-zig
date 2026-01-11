@@ -1,6 +1,7 @@
-///! Platform host that tests effectful functions writing to stdout and stderr.
+///! Platform host for roc-ray - a Roc platform for raylib graphics.
 const std = @import("std");
 const builtins = @import("builtins");
+const rl = @import("raylib");
 
 /// Global flag to track if dbg or expect_failed was called.
 /// If set, program exits with non-zero code to prevent accidental commits.
@@ -252,6 +253,14 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     _ = argc;
     _ = argv;
 
+    // Initialize raylib window
+    const screen_width = 800;
+    const screen_height = 600;
+    rl.initWindow(screen_width, screen_height, "Roc + Raylib");
+    defer rl.closeWindow();
+
+    rl.setTargetFPS(60);
+
     // Call the app's init! entrypoint
     std.log.debug("[HOST] Calling roc__init_for_host...", .{});
 
@@ -272,32 +281,35 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     var boxed_model = init_result.getModel();
     std.log.debug("[HOST] init returned Ok, model box=0x{x}", .{@intFromPtr(boxed_model)});
 
-    // Call render with the boxed model
-    // Roc's render_for_host! will call Box.unbox which consumes the box
-    std.log.debug("[HOST] Calling roc__render_for_host...", .{});
-
-    var render_result: Try_BoxModel_I64 = undefined;
-    roc__render_for_host(&roc_ops, &render_result, &boxed_model);
-    // Note: Roc's Box.unbox in render_for_host! consumes the init box
-
-    std.log.debug("[HOST] render returned, discriminant={d}", .{render_result.discriminant});
-
-    // Check render result and clean up
+    // Main render loop
     var exit_code: i32 = 0;
-    if (render_result.isErr()) {
-        exit_code = @intCast(render_result.getErrCode());
-        std.log.debug("[HOST] render returned Err({d})", .{exit_code});
-    } else {
-        std.log.debug("[HOST] render returned Ok", .{});
-        // Print success message
-        const stdout: std.fs.File = .stdout();
-        stdout.writeAll("Roc app completed successfully!\n") catch {};
+    while (!rl.windowShouldClose()) {
+        // Call render with the boxed model
+        var render_result: Try_BoxModel_I64 = undefined;
+        roc__render_for_host(&roc_ops, &render_result, &boxed_model);
 
-        // Decref the final boxed model - render consumed the init box,
-        // so we only need to decref the render result
-        const final_model = render_result.getModel();
-        std.log.debug("[HOST] Decrementing refcount for final model box=0x{x}", .{@intFromPtr(final_model)});
-        decrefRocBox(final_model, &roc_ops);
+        // Check render result
+        if (render_result.isErr()) {
+            exit_code = @intCast(render_result.getErrCode());
+            std.log.debug("[HOST] render returned Err({d})", .{exit_code});
+            break;
+        }
+
+        // Update boxed_model for next iteration
+        boxed_model = render_result.getModel();
+
+        // Draw frame
+        rl.beginDrawing();
+        rl.clearBackground(rl.Color.ray_white);
+        rl.drawText("Roc + Raylib!", 350, 280, 20, rl.Color.light_gray);
+        rl.drawFPS(10, 10);
+        rl.endDrawing();
+    }
+
+    // Clean up final model
+    if (exit_code == 0) {
+        std.log.debug("[HOST] Decrementing refcount for final model box=0x{x}", .{@intFromPtr(boxed_model)});
+        decrefRocBox(boxed_model, &roc_ops);
     }
 
     // Check for memory leaks before returning

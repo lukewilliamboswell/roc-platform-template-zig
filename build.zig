@@ -81,12 +81,18 @@ pub fn build(b: *std.Build) void {
     // Build for each Roc target
     for (all_targets) |roc_target| {
         const target = b.resolveTargetQuery(roc_target.toZigTarget());
-        const host_lib = buildHostLib(b, target, optimize, builtins_module);
+        const build_result = buildHostLib(b, target, optimize, builtins_module);
 
-        // Copy to platform/targets/{target}/libhost.a (or host.lib for Windows)
+        // Copy libhost.a to platform/targets/{target}/
         copy_all.addCopyFileToSource(
-            host_lib.getEmittedBin(),
+            build_result.host_lib.getEmittedBin(),
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
+        );
+
+        // Copy libraylib.a to platform/targets/{target}/
+        copy_all.addCopyFileToSource(
+            build_result.raylib_artifact.getEmittedBin(),
+            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), "libraylib.a" }),
         );
     }
 
@@ -102,16 +108,20 @@ pub fn build(b: *std.Build) void {
         return;
     };
 
-    const native_lib = buildHostLib(b, native_target, optimize, builtins_module);
-    b.installArtifact(native_lib);
+    const native_result = buildHostLib(b, native_target, optimize, builtins_module);
+    b.installArtifact(native_result.host_lib);
 
     const copy_native = b.addUpdateSourceFiles();
     copy_native.addCopyFileToSource(
-        native_lib.getEmittedBin(),
+        native_result.host_lib.getEmittedBin(),
         b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), native_roc_target.libFilename() }),
     );
+    copy_native.addCopyFileToSource(
+        native_result.raylib_artifact.getEmittedBin(),
+        b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), "libraylib.a" }),
+    );
     native_step.dependOn(&copy_native.step);
-    native_step.dependOn(&native_lib.step);
+    native_step.dependOn(&native_result.host_lib.step);
 
     // Test step: run unit tests and integration tests
     const test_step = b.step("test", "Run all tests (unit tests and integration tests)");
@@ -205,12 +215,27 @@ const CleanupStep = struct {
     }
 };
 
+const BuildResult = struct {
+    host_lib: *std.Build.Step.Compile,
+    raylib_artifact: *std.Build.Step.Compile,
+};
+
 fn buildHostLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     builtins_module: *std.Build.Module,
-) *std.Build.Step.Compile {
+) BuildResult {
+    // Get raylib dependency for this target
+    // Always use ReleaseFast for raylib to avoid sanitizer symbols (ubsan, etc.)
+    // that would require linking against sanitizer runtime libraries
+    const raylib_dep = b.dependency("raylib_zig", .{
+        .target = target,
+        .optimize = .ReleaseFast,
+    });
+    const raylib_module = raylib_dep.module("raylib");
+    const raylib_artifact = raylib_dep.artifact("raylib");
+
     const host_lib = b.addLibrary(.{
         .name = "host",
         .linkage = .static,
@@ -222,11 +247,19 @@ fn buildHostLib(
             .pic = true,
             .imports = &.{
                 .{ .name = "builtins", .module = builtins_module },
+                .{ .name = "raylib", .module = raylib_module },
             },
         }),
     });
+
+    // Link raylib into the host library
+    host_lib.linkLibrary(raylib_artifact);
+
     // Force bundle compiler-rt to resolve runtime symbols like __main
     host_lib.bundle_compiler_rt = true;
 
-    return host_lib;
+    return .{
+        .host_lib = host_lib,
+        .raylib_artifact = raylib_artifact,
+    };
 }

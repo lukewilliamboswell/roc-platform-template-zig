@@ -14,12 +14,12 @@ platform ""
 	targets: {
 		files: "targets/",
 		exe: {
-			x64linux: ["libhost.a", app],
-			arm64linux: ["libhost.a", app],
-			x64mac: ["libhost.a", app],
-			arm64mac: ["libhost.a", app],
-			x64win: ["libhost.a", app],
-			arm64win: ["libhost.a", app],
+			x64linux: ["libhost.a", "libraylib.a", app],
+			arm64linux: ["libhost.a", "libraylib.a", app],
+			x64mac: ["libhost.a", "libraylib.a", app],
+			arm64mac: ["libhost.a", "libraylib.a", app],
+			x64win: ["libhost.a", "libraylib.a", app],
+			arm64win: ["libhost.a", "libraylib.a", app],
 		}
 	}
 
