@@ -127,6 +127,12 @@ pub fn build(b: *std.Build) void {
     };
 
     const native_result = buildHostLib(b, native_target, optimize, builtins_module);
+
+    // For native Linux, ensure X11 stubs are generated first
+    if (native_target.result.os.tag == .linux) {
+        native_result.raylib_artifact.step.dependOn(gen_stubs);
+    }
+
     b.installArtifact(native_result.host_lib);
 
     const copy_native = b.addUpdateSourceFiles();
