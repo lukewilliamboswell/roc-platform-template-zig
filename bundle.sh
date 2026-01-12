@@ -9,7 +9,7 @@ roc_files=(*.roc)
 
 # Collect all host libraries from targets directories
 lib_files=()
-for lib in targets/*/*.a targets/*/*.o targets/*/*.lib; do
+for lib in targets/*/*.a targets/*/*.o targets/*/*.lib targets/*/*.so; do
     if [[ -f "$lib" ]]; then
         lib_files+=("$lib")
     fi
