@@ -112,6 +112,14 @@ pub fn build(b: *std.Build) void {
                 b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), "libc.so" }),
             );
         }
+
+        // Copy libm.so stub for Linux targets
+        if (build_result.libm_stub) |libm_stub| {
+            copy_all.addCopyFileToSource(
+                libm_stub,
+                b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), "libm.so" }),
+            );
+        }
     }
 
     // Native step: build only for the current platform (with full cleanup first)
@@ -152,6 +160,14 @@ pub fn build(b: *std.Build) void {
         copy_native.addCopyFileToSource(
             libc_stub,
             b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), "libc.so" }),
+        );
+    }
+
+    // Copy libm.so stub for native Linux
+    if (native_result.libm_stub) |libm_stub| {
+        copy_native.addCopyFileToSource(
+            libm_stub,
+            b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), "libm.so" }),
         );
     }
 
@@ -259,6 +275,9 @@ const BuildResult = struct {
     /// For Linux: libc stub with SONAME libc.so.6
     /// For other platforms: null
     libc_stub: ?std.Build.LazyPath,
+    /// For Linux: libm stub with SONAME libm.so.6
+    /// For other platforms: null
+    libm_stub: ?std.Build.LazyPath,
 };
 
 /// Custom step to clean a thin archive by removing .so file references.
@@ -477,6 +496,30 @@ fn generateLibcStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.
     return stub_lib;
 }
 
+/// Generate libm stub shared library with SONAME libm.so.6.
+/// At link time, Roc uses this stub to satisfy math function references.
+/// At runtime, the dynamic linker finds the real system libm.so.6.
+fn generateLibmStub(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step.Compile {
+    const stub_lib = b.addLibrary(.{
+        .name = "m",
+        .linkage = .dynamic,
+        .version = .{ .major = 6, .minor = 0, .patch = 0 }, // SONAME: libm.so.6
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = .ReleaseSmall,
+        }),
+    });
+
+    // Select architecture-specific stub file
+    const stub_path = switch (target.result.cpu.arch) {
+        .x86_64 => "platform/targets/x64glibc/libm_stub.s",
+        .aarch64 => "platform/targets/arm64glibc/libm_stub.s",
+        else => @panic("Unsupported architecture for libm stub"),
+    };
+    stub_lib.addAssemblyFile(b.path(stub_path));
+    return stub_lib;
+}
+
 fn buildHostLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
@@ -550,10 +593,17 @@ fn buildHostLib(
         break :blk stub.getEmittedBin();
     } else null;
 
+    // For Linux, generate libm stub with SONAME libm.so.6
+    const libm_stub: ?std.Build.LazyPath = if (target.result.os.tag == .linux) blk: {
+        const stub = generateLibmStub(b, target);
+        break :blk stub.getEmittedBin();
+    } else null;
+
     return .{
         .host_lib = host_lib,
         .raylib_artifact = raylib_artifact,
         .raylib_archive = raylib_archive,
         .libc_stub = libc_stub,
+        .libm_stub = libm_stub,
     };
 }
