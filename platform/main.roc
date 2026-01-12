@@ -16,6 +16,7 @@ platform ""
 		exe: {
 			x64mac: ["libhost.a", "libraylib.a", app],
 			arm64mac: ["libhost.a", "libraylib.a", app],
+			x64glibc: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", app, "crtn.o", "libc.so"],
 		}
 	}
 
