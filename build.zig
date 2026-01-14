@@ -292,7 +292,7 @@ pub fn build(b: *std.Build) void {
     serve_step.dependOn(wasm_test_step);
 
     const serve_cmd = b.addSystemCommand(&.{
-        "python3", "-m", "http.server", "8080",
+        "python3",     "-m",                                  "http.server", "8080",
         "--directory", b.getInstallPath(.prefix, "web-test"),
     });
     serve_cmd.step.dependOn(wasm_test_step);
@@ -451,7 +451,7 @@ fn buildHostLib(
         .name = "host",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("platform/host.zig"),
+            .root_source_file = b.path("platform/host_native.zig"),
             .target = target,
             .optimize = optimize,
             .strip = optimize != .Debug,
