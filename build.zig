@@ -237,7 +237,7 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    host_tests.root_module.addIncludePath(b.path("platform/vendor/raylib/include"));
+    host_tests.root_module.addIncludePath(b.path("vendor/raylib/include"));
 
     const run_host_tests = b.addRunArtifact(host_tests);
 
@@ -443,8 +443,8 @@ fn buildHostLib(
     builtins_module: *std.Build.Module,
     roc_target: RocTarget,
 ) BuildResult {
-    const raylib_include_path = b.path("platform/vendor/raylib/include");
-    const raylib_lib_dir = b.pathJoin(&.{ "platform", "vendor", "raylib", roc_target.vendoredRaylibDir() });
+    const raylib_include_path = b.path("vendor/raylib/include");
+    const raylib_lib_dir = b.pathJoin(&.{ "vendor", "raylib", roc_target.vendoredRaylibDir() });
     const raylib_lib_path = b.path(raylib_lib_dir);
 
     const host_lib = b.addLibrary(.{

@@ -20,8 +20,6 @@ platform ""
 			x64glibc: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", app, "libc.so", "crtn.o"],
 			arm64glibc: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", app, "libc.so", "crtn.o"],
 		}
-		## WASM target produces a static library that needs emcc post-processing
-		## libwasm_libc.a provides C library stubs for web builds
 		static_lib: {
 			wasm32: ["libhost.a", app],
 		}

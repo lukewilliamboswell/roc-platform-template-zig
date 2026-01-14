@@ -12,6 +12,7 @@ all_roc_syntax
 build
 app
 
+# Build artifacts (but NOT vendored libraries)
 *.a
 *.tar.br
 *.tar.gz
@@ -24,6 +25,12 @@ app
 *.o
 *.rh
 *.rm
+
+# Exception: keep vendored raylib libraries (at top-level vendor/)
+!vendor/raylib/**/*.a
+!vendor/raylib/**/*.so
+!vendor/raylib/**/*.dylib
+!vendor/raylib/**/*.lib
 
 .claude
 
