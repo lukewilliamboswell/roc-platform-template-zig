@@ -1,25 +1,100 @@
 ///! Platform host for roc-ray - a Roc platform for raylib graphics.
 const std = @import("std");
+const builtin = @import("builtin");
 const builtins = @import("builtins");
-const rl = @import("raylib");
+
+/// Detect WASM target (freestanding wasm32)
+const is_wasm = builtin.cpu.arch == .wasm32;
+
+// Direct C interop with raylib (no wrapper dependency)
+const rl = @cImport({
+    @cInclude("raylib.h");
+    @cInclude("rlgl.h");
+});
+
+// GLFW extern declarations for WASM builds (implementations provided by emscripten's -sUSE_GLFW=3)
+// We declare these as extern rather than @cImport because GLFW headers are in emscripten's sysroot
+const glfw = if (is_wasm) struct {
+    pub extern fn glfwGetProcAddress(procname: [*:0]const u8) ?*anyopaque;
+    pub extern fn glfwGetWindowAttrib(window: ?*anyopaque, attrib: i32) i32;
+    pub extern fn glfwSetCursorPos(window: ?*anyopaque, xpos: f64, ypos: f64) void;
+    pub extern fn glfwSetWindowAttrib(window: ?*anyopaque, attrib: i32, value: i32) void;
+    pub extern fn glfwSetWindowSize(window: ?*anyopaque, width: i32, height: i32) void;
+} else struct {};
+
+// Emscripten HTML5 API extern declarations (used by raylib for browser interaction)
+const emscripten = if (is_wasm) struct {
+    pub extern fn emscripten_sleep(ms: c_uint) void;
+    pub extern fn emscripten_asm_const_int(code: [*:0]const u8, sig: [*:0]const u8, args: ?*anyopaque) c_int;
+    pub extern fn emscripten_set_window_title(title: [*:0]const u8) void;
+    pub extern fn emscripten_set_canvas_element_size(target: [*:0]const u8, width: c_int, height: c_int) c_int;
+    pub extern fn emscripten_exit_pointerlock() c_int;
+    pub extern fn emscripten_request_pointerlock(target: [*:0]const u8, defer_until_in_event: c_int) c_int;
+    pub extern fn emscripten_run_script(script: [*:0]const u8) void;
+    pub extern fn emscripten_sample_gamepad_data() c_int;
+    pub extern fn emscripten_get_num_gamepads() c_int;
+    pub extern fn emscripten_get_gamepad_status(index: c_int, state: ?*anyopaque) c_int;
+    pub extern fn emscripten_set_fullscreenchange_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
+    pub extern fn emscripten_set_resize_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
+    pub extern fn emscripten_set_click_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
+    pub extern fn emscripten_set_pointerlockchange_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
+    pub extern fn emscripten_set_mousemove_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
+    pub extern fn emscripten_set_touchstart_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
+    pub extern fn emscripten_set_touchend_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
+    pub extern fn emscripten_set_touchmove_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
+    pub extern fn emscripten_set_touchcancel_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
+    pub extern fn emscripten_set_gamepadconnected_callback_on_thread(user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
+    pub extern fn emscripten_set_gamepaddisconnected_callback_on_thread(user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
+    pub extern fn emscripten_get_element_css_size(target: [*:0]const u8, width: *f64, height: *f64) c_int;
+} else struct {};
 
 const TRACE_ALLOCATIONS = false;
 const TRACE_HOST = false;
 
+/// WASM console output functions (provided by JavaScript environment)
+extern "env" fn js_console_log(ptr: [*]const u8, len: usize) void;
+extern "env" fn js_console_error(ptr: [*]const u8, len: usize) void;
+
+fn wasmConsoleLog(msg: []const u8) void {
+    if (is_wasm) {
+        js_console_log(msg.ptr, msg.len);
+    }
+}
+
+fn wasmConsoleError(msg: []const u8) void {
+    if (is_wasm) {
+        js_console_error(msg.ptr, msg.len);
+    }
+}
+
 /// Global flag to track if dbg or expect_failed was called.
 /// If set, program exits with non-zero code to prevent accidental commits.
-var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+/// Note: For WASM, we use a simple bool since it's single-threaded.
+/// For native builds, we use atomic to handle potential multi-threaded scenarios.
+var debug_or_expect_called: if (is_wasm) bool else std.atomic.Value(bool) =
+    if (is_wasm) false else std.atomic.Value(bool).init(false);
 
-/// Host environment
-const HostEnv = struct {
+/// Host environment - conditionally uses different allocators for WASM vs native
+const HostEnv = if (is_wasm) struct {
+    // WASM uses a simple allocator, no stdin
+    wasm_alloc: std.mem.Allocator,
+
+    pub fn allocator(self: *@This()) std.mem.Allocator {
+        return self.wasm_alloc;
+    }
+} else struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
     stdin_reader: std.fs.File.Reader,
+
+    pub fn allocator(self: *@This()) std.mem.Allocator {
+        return self.gpa.allocator();
+    }
 };
 
 /// Roc allocation function with size-tracking metadata
 fn rocAllocFn(roc_alloc: *builtins.host_abi.RocAlloc, env: *anyopaque) callconv(.c) void {
     const host: *HostEnv = @ptrCast(@alignCast(env));
-    const allocator = host.gpa.allocator();
+    const allocator = host.allocator();
 
     const min_alignment: usize = @max(roc_alloc.alignment, @alignOf(usize));
     const align_enum = std.mem.Alignment.fromByteUnits(min_alignment);
@@ -32,9 +107,14 @@ fn rocAllocFn(roc_alloc: *builtins.host_abi.RocAlloc, env: *anyopaque) callconv(
     const result = allocator.rawAlloc(total_size, align_enum, @returnAddress());
 
     const base_ptr = result orelse {
-        const stderr: std.fs.File = .stderr();
-        stderr.writeAll("\x1b[31mHost error:\x1b[0m allocation failed, out of memory\n") catch {};
-        std.process.exit(1);
+        if (is_wasm) {
+            wasmConsoleError("Host error: allocation failed, out of memory");
+            @panic("allocation failed");
+        } else {
+            const stderr: std.fs.File = .stderr();
+            stderr.writeAll("\x1b[31mHost error:\x1b[0m allocation failed, out of memory\n") catch {};
+            std.process.exit(1);
+        }
     };
 
     // Store the total size (including metadata) right before the user data
@@ -56,7 +136,7 @@ fn rocDeallocFn(roc_dealloc: *builtins.host_abi.RocDealloc, env: *anyopaque) cal
     }
 
     const host: *HostEnv = @ptrCast(@alignCast(env));
-    const allocator = host.gpa.allocator();
+    const allocator = host.allocator();
 
     // Calculate where the size metadata is stored
     const size_storage_bytes = @max(roc_dealloc.alignment, @alignOf(usize));
@@ -80,7 +160,7 @@ fn rocDeallocFn(roc_dealloc: *builtins.host_abi.RocDealloc, env: *anyopaque) cal
 /// Roc reallocation function with size-tracking metadata
 fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) callconv(.c) void {
     const host: *HostEnv = @ptrCast(@alignCast(env));
-    const allocator = host.gpa.allocator();
+    const allocator = host.allocator();
 
     // Calculate alignment
     const min_alignment: usize = @max(roc_realloc.alignment, @alignOf(usize));
@@ -101,9 +181,14 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
 
     // Allocate new memory with proper alignment
     const new_base_ptr = allocator.rawAlloc(new_total_size, align_enum, @returnAddress()) orelse {
-        const stderr: std.fs.File = .stderr();
-        stderr.writeAll("\x1b[31mHost error:\x1b[0m reallocation failed, out of memory\n") catch {};
-        std.process.exit(1);
+        if (is_wasm) {
+            wasmConsoleError("Host error: reallocation failed, out of memory");
+            @panic("reallocation failed");
+        } else {
+            const stderr: std.fs.File = .stderr();
+            stderr.writeAll("\x1b[31mHost error:\x1b[0m reallocation failed, out of memory\n") catch {};
+            std.process.exit(1);
+        }
     };
 
     // Copy old data to new allocation (excluding metadata, just user data)
@@ -132,36 +217,60 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
 /// Roc debug function
 fn rocDbgFn(roc_dbg: *const builtins.host_abi.RocDbg, env: *anyopaque) callconv(.c) void {
     _ = env;
-    debug_or_expect_called.store(true, .release);
+    if (is_wasm) {
+        debug_or_expect_called = true;
+    } else {
+        debug_or_expect_called.store(true, .release);
+    }
     const message = roc_dbg.utf8_bytes[0..roc_dbg.len];
-    const stderr: std.fs.File = .stderr();
-    stderr.writeAll("\x1b[33mdbg:\x1b[0m ") catch {};
-    stderr.writeAll(message) catch {};
-    stderr.writeAll("\n") catch {};
+    if (is_wasm) {
+        wasmConsoleLog("dbg: ");
+        wasmConsoleLog(message);
+    } else {
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll("\x1b[33mdbg:\x1b[0m ") catch {};
+        stderr.writeAll(message) catch {};
+        stderr.writeAll("\n") catch {};
+    }
 }
 
 /// Roc expect failed function
 fn rocExpectFailedFn(roc_expect: *const builtins.host_abi.RocExpectFailed, env: *anyopaque) callconv(.c) void {
     _ = env;
-    debug_or_expect_called.store(true, .release);
+    if (is_wasm) {
+        debug_or_expect_called = true;
+    } else {
+        debug_or_expect_called.store(true, .release);
+    }
     const source_bytes = roc_expect.utf8_bytes[0..roc_expect.len];
     const trimmed = std.mem.trim(u8, source_bytes, " \t\n\r");
-    const stderr: std.fs.File = .stderr();
-    stderr.writeAll("\x1b[33mexpect failed:\x1b[0m ") catch {};
-    stderr.writeAll(trimmed) catch {};
-    stderr.writeAll("\n") catch {};
+    if (is_wasm) {
+        wasmConsoleError("expect failed: ");
+        wasmConsoleError(trimmed);
+    } else {
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll("\x1b[33mexpect failed:\x1b[0m ") catch {};
+        stderr.writeAll(trimmed) catch {};
+        stderr.writeAll("\n") catch {};
+    }
 }
 
 /// Roc crashed function
 fn rocCrashedFn(roc_crashed: *const builtins.host_abi.RocCrashed, env: *anyopaque) callconv(.c) noreturn {
     _ = env;
     const message = roc_crashed.utf8_bytes[0..roc_crashed.len];
-    const stderr: std.fs.File = .stderr();
-    var buf: [256]u8 = undefined;
-    var w = stderr.writer(&buf);
-    w.interface.print("\n\x1b[31mRoc crashed:\x1b[0m {s}\n", .{message}) catch {};
-    w.interface.flush() catch {};
-    std.process.exit(1);
+    if (is_wasm) {
+        wasmConsoleError("Roc crashed: ");
+        wasmConsoleError(message);
+        @panic("Roc crashed");
+    } else {
+        const stderr: std.fs.File = .stderr();
+        var buf: [256]u8 = undefined;
+        var w = stderr.writer(&buf);
+        w.interface.print("\n\x1b[31mRoc crashed:\x1b[0m {s}\n", .{message}) catch {};
+        w.interface.flush() catch {};
+        std.process.exit(1);
+    }
 }
 
 // A RocBox is an opaque pointer to a Roc heap-allocated value
@@ -224,12 +333,12 @@ extern fn roc__render_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *Try_Box
 
 // OS-specific entry point handling (not exported during tests)
 comptime {
-    if (!@import("builtin").is_test) {
-        // Export main for all platforms
+    if (!builtin.is_test) {
+        // Export main for all platforms (including WASM/emscripten)
         @export(&main, .{ .name = "main" });
 
         // Windows MinGW/MSVCRT compatibility: export __main stub
-        if (@import("builtin").os.tag == .windows) {
+        if (builtin.os.tag == .windows) {
             @export(&__main, .{ .name = "__main" });
         }
     }
@@ -295,20 +404,20 @@ const RocText = extern struct {
 /// LightGray=5, Orange=6, Pink=7, Purple=8, RayWhite=9, Red=10, White=11, Yellow=12
 fn rocColorToRaylib(discriminant: u8) rl.Color {
     return switch (discriminant) {
-        0 => rl.Color.black,
-        1 => rl.Color.blue,
-        2 => rl.Color.dark_gray,
-        3 => rl.Color.gray,
-        4 => rl.Color.green,
-        5 => rl.Color.light_gray,
-        6 => rl.Color.orange,
-        7 => rl.Color.pink,
-        8 => rl.Color.purple,
-        9 => rl.Color.ray_white,
-        10 => rl.Color.red,
-        11 => rl.Color.white,
-        12 => rl.Color.yellow,
-        else => rl.Color.magenta, // Error fallback
+        0 => rl.BLACK,
+        1 => rl.BLUE,
+        2 => rl.DARKGRAY,
+        3 => rl.GRAY,
+        4 => rl.GREEN,
+        5 => rl.LIGHTGRAY,
+        6 => rl.ORANGE,
+        7 => rl.PINK,
+        8 => rl.PURPLE,
+        9 => rl.RAYWHITE,
+        10 => rl.RED,
+        11 => rl.WHITE,
+        12 => rl.YELLOW,
+        else => rl.MAGENTA, // Error fallback
     };
 }
 
@@ -317,7 +426,7 @@ fn hostedDrawBeginFrame(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, arg
     _ = ops;
     _ = ret_ptr;
     _ = args_ptr;
-    rl.beginDrawing();
+    rl.BeginDrawing();
 }
 
 /// Hosted function: Draw.circle! (index 1 alphabetically)
@@ -325,7 +434,7 @@ fn hostedDrawCircle(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
     _ = ops;
     _ = ret_ptr;
     const circle: *const RocCircle = @ptrCast(@alignCast(args_ptr));
-    rl.drawCircle(
+    rl.DrawCircle(
         @intFromFloat(circle.center.x),
         @intFromFloat(circle.center.y),
         circle.radius,
@@ -338,7 +447,7 @@ fn hostedDrawClear(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr
     _ = ops;
     _ = ret_ptr;
     const color_discriminant: *const u8 = @ptrCast(args_ptr);
-    rl.clearBackground(rocColorToRaylib(color_discriminant.*));
+    rl.ClearBackground(rocColorToRaylib(color_discriminant.*));
 }
 
 /// Hosted function: Draw.end_frame! (index 3 alphabetically)
@@ -346,7 +455,7 @@ fn hostedDrawEndFrame(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_
     _ = ops;
     _ = ret_ptr;
     _ = args_ptr;
-    rl.endDrawing();
+    rl.EndDrawing();
 }
 
 /// Hosted function: Draw.line! (index 4 alphabetically)
@@ -354,7 +463,7 @@ fn hostedDrawLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr:
     _ = ops;
     _ = ret_ptr;
     const line: *const RocLine = @ptrCast(@alignCast(args_ptr));
-    rl.drawLine(
+    rl.DrawLine(
         @intFromFloat(line.start.x),
         @intFromFloat(line.start.y),
         @intFromFloat(line.end.x),
@@ -368,7 +477,7 @@ fn hostedDrawRectangle(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args
     _ = ops;
     _ = ret_ptr;
     const rect: *const RocRectangle = @ptrCast(@alignCast(args_ptr));
-    rl.drawRectangle(
+    rl.DrawRectangle(
         @intFromFloat(rect.x),
         @intFromFloat(rect.y),
         @intFromFloat(rect.width),
@@ -388,7 +497,7 @@ fn hostedDrawText(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr:
     if (text_slice.len < buf.len) {
         @memcpy(buf[0..text_slice.len], text_slice);
         buf[text_slice.len] = 0;
-        rl.drawText(buf[0..text_slice.len :0], @intFromFloat(txt.pos.x), @intFromFloat(txt.pos.y), txt.size, rocColorToRaylib(txt.color));
+        rl.DrawText(buf[0..text_slice.len :0], @intFromFloat(txt.pos.x), @intFromFloat(txt.pos.y), txt.size, rocColorToRaylib(txt.color));
     }
 }
 
@@ -404,13 +513,175 @@ const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
     hostedDrawText, // Draw.text! (6)
 };
 
+/// Force-include all rlgl/GL functions that raylib might use at runtime.
+/// This prevents emscripten from dead-code-eliminating GL functions that
+/// are only called through certain raylib code paths.
+/// The function is never actually called - just referenced at comptime.
+fn forceIncludeGLFunctions() void {
+    // Framebuffer functions (glBindFramebuffer, glGenFramebuffers, glDeleteFramebuffers, etc.)
+    _ = rl.rlLoadFramebuffer;
+    _ = rl.rlUnloadFramebuffer;
+    _ = rl.rlFramebufferAttach;
+    _ = rl.rlFramebufferComplete;
+    _ = rl.rlBindFramebuffer;
+    _ = rl.rlEnableFramebuffer;
+    _ = rl.rlDisableFramebuffer;
+
+    // Renderbuffer functions (glBindRenderbuffer, glGenRenderbuffers, glRenderbufferStorage)
+    _ = rl.rlLoadTextureDepth;
+
+    // Blending functions (glBlendEquation, glBlendEquationSeparate, glBlendFuncSeparate)
+    _ = rl.rlSetBlendMode;
+    _ = rl.rlSetBlendFactors;
+    _ = rl.rlSetBlendFactorsSeparate;
+    _ = rl.rlEnableColorBlend;
+    _ = rl.rlDisableColorBlend;
+
+    // Texture functions (glTexParameterf, glTexSubImage2D, glGenerateMipmap)
+    _ = rl.rlLoadTexture;
+    _ = rl.rlLoadTextureCubemap;
+    _ = rl.rlUnloadTexture;
+    _ = rl.rlUpdateTexture;
+    _ = rl.rlGenTextureMipmaps;
+    _ = rl.rlReadTexturePixels;
+    _ = rl.rlSetTexture;
+    _ = rl.rlActiveTextureSlot;
+    _ = rl.rlEnableTexture;
+    _ = rl.rlDisableTexture;
+    _ = rl.rlEnableTextureCubemap;
+    _ = rl.rlDisableTextureCubemap;
+    _ = rl.rlTextureParameters;
+
+    // Shader uniform functions (glUniform1fv, glUniform2fv, glUniform3fv, glUniform4fv, etc.)
+    _ = rl.rlSetUniform;
+    _ = rl.rlSetUniformMatrix;
+    _ = rl.rlSetUniformMatrices;
+    _ = rl.rlSetUniformSampler;
+    _ = rl.rlLoadShaderCode;
+    _ = rl.rlLoadShaderProgram;
+    _ = rl.rlUnloadShaderProgram;
+    _ = rl.rlEnableShader;
+    _ = rl.rlDisableShader;
+    _ = rl.rlSetShader;
+    _ = rl.rlGetLocationUniform;
+    _ = rl.rlGetLocationAttrib;
+
+    // Vertex attribute functions (glVertexAttrib1fv, glVertexAttrib2fv, etc.)
+    _ = rl.rlSetVertexAttribute;
+    _ = rl.rlSetVertexAttributeDefault;
+    _ = rl.rlSetVertexAttributeDivisor;
+    _ = rl.rlEnableVertexAttribute;
+    _ = rl.rlDisableVertexAttribute;
+    _ = rl.rlLoadVertexArray;
+    _ = rl.rlLoadVertexBuffer;
+    _ = rl.rlLoadVertexBufferElement;
+    _ = rl.rlUnloadVertexArray;
+    _ = rl.rlUnloadVertexBuffer;
+    _ = rl.rlEnableVertexArray;
+    _ = rl.rlDisableVertexArray;
+    _ = rl.rlEnableVertexBuffer;
+    _ = rl.rlDisableVertexBuffer;
+    _ = rl.rlEnableVertexBufferElement;
+    _ = rl.rlDisableVertexBufferElement;
+
+    // Depth/stencil functions (glDepthMask, glColorMask)
+    _ = rl.rlEnableDepthTest;
+    _ = rl.rlDisableDepthTest;
+    _ = rl.rlEnableDepthMask;
+    _ = rl.rlDisableDepthMask;
+    _ = rl.rlColorMask;
+
+    // Scissor functions (glScissor)
+    _ = rl.rlEnableScissorTest;
+    _ = rl.rlDisableScissorTest;
+    _ = rl.rlScissor;
+
+    // Line width (glLineWidth)
+    _ = rl.rlSetLineWidth;
+    _ = rl.rlGetLineWidth;
+
+    // Error checking (glGetError)
+    _ = rl.rlGetGlTextureFormats;
+    _ = rl.rlGetVersion;
+
+    // Render batch (uses various GL functions internally)
+    _ = rl.rlLoadRenderBatch;
+    _ = rl.rlUnloadRenderBatch;
+    _ = rl.rlDrawRenderBatch;
+    _ = rl.rlSetRenderBatchActive;
+    _ = rl.rlDrawRenderBatchActive;
+    _ = rl.rlCheckRenderBatchLimit;
+
+    // Matrix functions
+    _ = rl.rlSetMatrixProjection;
+    _ = rl.rlSetMatrixModelview;
+    _ = rl.rlGetMatrixModelview;
+    _ = rl.rlGetMatrixProjection;
+    _ = rl.rlGetMatrixTransform;
+    _ = rl.rlGetMatrixProjectionStereo;
+    _ = rl.rlGetMatrixViewOffsetStereo;
+
+    // Drawing primitives (to ensure basic GL calls are included)
+    _ = rl.rlLoadDrawCube;
+    _ = rl.rlLoadDrawQuad;
+
+    // GLFW functions (only for WASM builds, provided by emscripten's -sUSE_GLFW=3)
+    // Force emscripten to include these by generating actual call instructions
+    if (is_wasm) {
+        // These calls are in dead code (the function is never called with flag=true)
+        // but they force the compiler to include the GLFW function imports
+        _ = glfw.glfwGetProcAddress("dummy");
+        _ = glfw.glfwGetWindowAttrib(null, 0);
+        glfw.glfwSetCursorPos(null, 0, 0);
+        glfw.glfwSetWindowAttrib(null, 0, 0);
+        glfw.glfwSetWindowSize(null, 0, 0);
+
+        // Emscripten HTML5 API functions (used by raylib for browser interaction)
+        emscripten.emscripten_sleep(0);
+        _ = emscripten.emscripten_asm_const_int("", "", null);
+        emscripten.emscripten_set_window_title("");
+        _ = emscripten.emscripten_set_canvas_element_size("", 0, 0);
+        _ = emscripten.emscripten_exit_pointerlock();
+        _ = emscripten.emscripten_request_pointerlock("", 0);
+        emscripten.emscripten_run_script("");
+        _ = emscripten.emscripten_sample_gamepad_data();
+        _ = emscripten.emscripten_get_num_gamepads();
+        _ = emscripten.emscripten_get_gamepad_status(0, null);
+        _ = emscripten.emscripten_set_fullscreenchange_callback_on_thread("", null, 0, null, 0);
+        _ = emscripten.emscripten_set_resize_callback_on_thread("", null, 0, null, 0);
+        _ = emscripten.emscripten_set_click_callback_on_thread("", null, 0, null, 0);
+        _ = emscripten.emscripten_set_pointerlockchange_callback_on_thread("", null, 0, null, 0);
+        _ = emscripten.emscripten_set_mousemove_callback_on_thread("", null, 0, null, 0);
+        _ = emscripten.emscripten_set_touchstart_callback_on_thread("", null, 0, null, 0);
+        _ = emscripten.emscripten_set_touchend_callback_on_thread("", null, 0, null, 0);
+        _ = emscripten.emscripten_set_touchmove_callback_on_thread("", null, 0, null, 0);
+        _ = emscripten.emscripten_set_touchcancel_callback_on_thread("", null, 0, null, 0);
+        _ = emscripten.emscripten_set_gamepadconnected_callback_on_thread(null, 0, null, 0);
+        _ = emscripten.emscripten_set_gamepaddisconnected_callback_on_thread(null, 0, null, 0);
+        var w: f64 = 0;
+        var h: f64 = 0;
+        _ = emscripten.emscripten_get_element_css_size("", &w, &h);
+    }
+}
+
+// Force the compiler to include the GL/GLFW function references by exporting
+// This prevents dead-code elimination during both Zig and emscripten compilation
+export fn __force_gl_exports() void {
+    forceIncludeGLFunctions();
+}
+
 /// Platform host entrypoint
 fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
-    var stdin_buffer: [4096]u8 = undefined;
-
-    var host_env = HostEnv{
-        .gpa = std.heap.GeneralPurposeAllocator(.{}){},
-        .stdin_reader = std.fs.File.stdin().reader(&stdin_buffer),
+    var host_env: HostEnv = if (is_wasm) blk: {
+        break :blk HostEnv{
+            .wasm_alloc = std.heap.wasm_allocator,
+        };
+    } else blk: {
+        var stdin_buffer: [4096]u8 = undefined;
+        break :blk HostEnv{
+            .gpa = std.heap.GeneralPurposeAllocator(.{}){},
+            .stdin_reader = std.fs.File.stdin().reader(&stdin_buffer),
+        };
     };
 
     // Create the RocOps struct
@@ -435,10 +706,10 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     // Initialize raylib window
     const screen_width = 800;
     const screen_height = 600;
-    rl.initWindow(screen_width, screen_height, "Roc + Raylib");
-    defer rl.closeWindow();
+    rl.InitWindow(screen_width, screen_height, "Roc + Raylib");
+    defer rl.CloseWindow();
 
-    rl.setTargetFPS(60);
+    rl.SetTargetFPS(60);
 
     if (TRACE_HOST) {
         // Call the app's init! entrypoint
@@ -468,24 +739,25 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         std.log.debug("[HOST] init returned Ok, model box=0x{x}", .{@intFromPtr(boxed_model)});
     }
 
+    rl.SetTargetFPS(240);
+
     // Main render loop
     var exit_code: i32 = 0;
     var frame_count: u64 = 0;
-    while (!rl.windowShouldClose()) {
+    while (!rl.WindowShouldClose()) {
         // Build platform state for this frame
-        const mouse_pos = rl.getMousePosition();
+        const mouse_pos = rl.GetMousePosition();
         const platform_state = RocPlatformState{
             .frame_count = frame_count,
-            .mouse_left = rl.isMouseButtonDown(.left),
-            .mouse_middle = rl.isMouseButtonDown(.middle),
-            .mouse_right = rl.isMouseButtonDown(.right),
-            .mouse_wheel = rl.getMouseWheelMove(),
+            .mouse_left = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_LEFT),
+            .mouse_middle = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_MIDDLE),
+            .mouse_right = rl.IsMouseButtonDown(rl.MOUSE_BUTTON_RIGHT),
+            .mouse_wheel = rl.GetMouseWheelMove(),
             .mouse_x = mouse_pos.x,
             .mouse_y = mouse_pos.y,
         };
 
         if (TRACE_HOST and frame_count % 60 == 0) {
-            const dbg_stderr: std.fs.File = .stderr();
             var buf: [256]u8 = undefined;
             const msg = std.fmt.bufPrint(&buf, "[HOST] frame={d} mouse=({d:.1}, {d:.1}) left={}\n", .{
                 frame_count,
@@ -493,7 +765,12 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
                 platform_state.mouse_y,
                 platform_state.mouse_left,
             }) catch "[HOST] print error\n";
-            dbg_stderr.writeAll(msg) catch {};
+            if (is_wasm) {
+                wasmConsoleLog(msg);
+            } else {
+                const dbg_stderr: std.fs.File = .stderr();
+                dbg_stderr.writeAll(msg) catch {};
+            }
         }
 
         // Call render with the boxed model and platform state
@@ -529,15 +806,18 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         decrefRocBox(boxed_model, &roc_ops);
     }
 
-    // Check for memory leaks before returning
-    const leak_status = host_env.gpa.deinit();
-    if (leak_status == .leak) {
-        std.log.warn("Memory leak detected", .{});
+    // Check for memory leaks before returning (native builds only)
+    if (!is_wasm) {
+        const leak_status = host_env.gpa.deinit();
+        if (leak_status == .leak) {
+            std.log.warn("Memory leak detected", .{});
+        }
     }
 
     // If dbg or expect_failed was called, ensure non-zero exit code
     // to prevent accidental commits with debug statements or failing tests
-    if (debug_or_expect_called.load(.acquire) and exit_code == 0) {
+    const was_debug_called = if (is_wasm) debug_or_expect_called else debug_or_expect_called.load(.acquire);
+    if (was_debug_called and exit_code == 0) {
         return 1;
     }
 

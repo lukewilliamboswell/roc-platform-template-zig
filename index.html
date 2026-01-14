@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+    <meta charset="utf-8">
+    <title>Roc + Raylib WASM</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+        canvas {
+            border: 1px solid #444;
+        }
+        #status {
+            color: #fff;
+            font-family: monospace;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="status">Loading...</div>
+    <canvas id="canvas" width="800" height="600" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+    <script>
+        var Module = {
+            canvas: document.getElementById('canvas'),
+            print: function(text) { console.log(text); },
+            printErr: function(text) { console.error(text); },
+            setStatus: function(text) {
+                document.getElementById('status').textContent = text;
+            },
+            // Load hello_world.wasm instead of host.wasm
+            locateFile: function(path, prefix) {
+                if (path.endsWith('.wasm')) {
+                    return 'hello_world.wasm';
+                }
+                return prefix + path;
+            },
+            onRuntimeInitialized: function() {
+                console.log('Roc app initialized');
+                document.getElementById('status').textContent = 'Running';
+            }
+        };
+    </script>
+    <script src="host.js"></script>
+</body>
+</html>

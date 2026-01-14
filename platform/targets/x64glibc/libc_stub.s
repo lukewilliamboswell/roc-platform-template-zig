@@ -1929,3 +1929,60 @@ __isoc99_sscanf:
 strtoul:
     xor %rax, %rax
     ret
+
+# glibc FORTIFY_SOURCE functions (needed by raylib compiled with glibc)
+.balign 8
+.globl __assert_fail
+.type __assert_fail, %function
+__assert_fail:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __vfprintf_chk
+.type __vfprintf_chk, %function
+__vfprintf_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __fprintf_chk
+.type __fprintf_chk, %function
+__fprintf_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __printf_chk
+.type __printf_chk, %function
+__printf_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __sprintf_chk
+.type __sprintf_chk, %function
+__sprintf_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __snprintf_chk
+.type __snprintf_chk, %function
+__snprintf_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __vsnprintf_chk
+.type __vsnprintf_chk, %function
+__vsnprintf_chk:
+    xor %rax, %rax
+    ret
+
+.balign 8
+.globl __xstat
+.type __xstat, %function
+__xstat:
+    xor %rax, %rax
+    ret

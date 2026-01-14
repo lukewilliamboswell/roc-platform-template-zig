@@ -1,7 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const zemscripten = @import("zemscripten");
 
 /// Roc target definitions matching src/cli/target.zig
+/// Maps to vendored raylib library directories
 const RocTarget = enum {
     // x64 (x86_64) targets
     x64mac,
@@ -13,6 +15,9 @@ const RocTarget = enum {
     arm64win,
     arm64glibc,
 
+    // wasm32 target (for web/emscripten)
+    wasm32,
+
     fn toZigTarget(self: RocTarget) std.Target.Query {
         return switch (self) {
             .x64mac => .{ .cpu_arch = .x86_64, .os_tag = .macos },
@@ -21,6 +26,9 @@ const RocTarget = enum {
             .arm64mac => .{ .cpu_arch = .aarch64, .os_tag = .macos },
             .arm64win => .{ .cpu_arch = .aarch64, .os_tag = .windows, .abi = .gnu },
             .arm64glibc => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .gnu },
+            // WASM uses freestanding for Zig compilation (avoids std library issues)
+            // emcc is used later for linking and JS runtime generation
+            .wasm32 => .{ .cpu_arch = .wasm32, .os_tag = .freestanding },
         };
     }
 
@@ -32,6 +40,7 @@ const RocTarget = enum {
             .arm64mac => "arm64mac",
             .arm64win => "arm64win",
             .arm64glibc => "arm64glibc",
+            .wasm32 => "wasm32",
         };
     }
 
@@ -41,9 +50,21 @@ const RocTarget = enum {
             else => "libhost.a",
         };
     }
+
+    /// Get the vendored raylib library directory for this target
+    fn vendoredRaylibDir(self: RocTarget) []const u8 {
+        return switch (self) {
+            .x64mac, .arm64mac => "macos",
+            .x64glibc => "linux-x64",
+            .arm64glibc => "linux-arm64",
+            .x64win, .arm64win => "windows-x64",
+            .wasm32 => "wasm32",
+        };
+    }
 };
 
 /// All cross-compilation targets for `zig build`
+/// Note: wasm32 requires emscripten SDK setup, use `zig build wasm` separately
 const all_targets = [_]RocTarget{
     .x64mac,
     .arm64mac,
@@ -85,11 +106,11 @@ pub fn build(b: *std.Build) void {
     // Build for each Roc target
     for (all_targets) |roc_target| {
         const target = b.resolveTargetQuery(roc_target.toZigTarget());
-        const build_result = buildHostLib(b, target, optimize, builtins_module);
+        const build_result = buildHostLib(b, target, optimize, builtins_module, roc_target);
 
         // For Linux targets, ensure X11 stubs are generated first
         if (target.result.os.tag == .linux) {
-            build_result.raylib_artifact.step.dependOn(gen_stubs);
+            build_result.host_lib.step.dependOn(gen_stubs);
         }
 
         // Copy libhost.a to platform/targets/{target}/
@@ -98,8 +119,7 @@ pub fn build(b: *std.Build) void {
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
         );
 
-        // Copy libraylib.a to platform/targets/{target}/
-        // For Linux, this uses the cleaned archive without .so references
+        // Copy vendored libraylib.a to platform/targets/{target}/
         copy_all.addCopyFileToSource(
             build_result.raylib_archive,
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), "libraylib.a" }),
@@ -134,11 +154,11 @@ pub fn build(b: *std.Build) void {
         return;
     };
 
-    const native_result = buildHostLib(b, native_target, optimize, builtins_module);
+    const native_result = buildHostLib(b, native_target, optimize, builtins_module, native_roc_target);
 
     // For native Linux, ensure X11 stubs are generated first
     if (native_target.result.os.tag == .linux) {
-        native_result.raylib_artifact.step.dependOn(gen_stubs);
+        native_result.host_lib.step.dependOn(gen_stubs);
     }
 
     b.installArtifact(native_result.host_lib);
@@ -188,6 +208,8 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+    // Add raylib include path for @cImport("raylib.h")
+    host_tests.root_module.addIncludePath(b.path("platform/vendor/raylib/include"));
 
     const run_host_tests = b.addRunArtifact(host_tests);
 
@@ -212,6 +234,145 @@ pub fn build(b: *std.Build) void {
     }
 
     test_step.dependOn(&run_integration.step);
+
+    // WASM step: build for WebAssembly/Emscripten
+    // This uses zemscripten for emsdk management and emcc for linking
+    const wasm_step = b.step("wasm", "Build host library for WebAssembly with JS runtime");
+
+    // First, activate the Emscripten SDK (downloads and sets up emcc)
+    const activate_emsdk = zemscripten.activateEmsdkStep(b);
+
+    // Build host library for wasm32-freestanding target
+    // (freestanding avoids Zig std library issues with emscripten)
+    const wasm_target = b.resolveTargetQuery(RocTarget.wasm32.toZigTarget());
+    const wasm_result = buildHostLib(b, wasm_target, optimize, builtins_module, .wasm32);
+
+    // Create emcc command to link libraries and generate JS runtime
+    // emcc links: libhost.a (Zig-compiled) + libraylib.a (vendored) -> HTML/JS/WASM
+    const emcc = b.addSystemCommand(&.{zemscripten.emccPath(b)});
+
+    // Optimization flags
+    switch (optimize) {
+        .Debug => {
+            emcc.addArgs(&.{ "-O0", "-g" });
+        },
+        .ReleaseSafe => {
+            emcc.addArgs(&.{"-O2"});
+        },
+        .ReleaseFast => {
+            emcc.addArgs(&.{"-O3"});
+        },
+        .ReleaseSmall => {
+            emcc.addArgs(&.{"-Oz"});
+        },
+    }
+
+    // Raylib-specific emcc settings
+    emcc.addArgs(&.{
+        "-sUSE_GLFW=3", // GLFW for window/input
+        "-sASYNCIFY", // Async main loop support
+        "-sALLOW_MEMORY_GROWTH=1", // Dynamic memory
+        "-sFULL_ES3=1", // Full OpenGL ES3
+        "-sMAX_WEBGL_VERSION=2", // WebGL 2.0
+    });
+
+    // Export functions for runtime
+    emcc.addArgs(&.{
+        "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','___force_gl_exports']",
+        "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString','stringToUTF8','getValue','setValue']",
+    });
+
+    // Allow only Roc-specific symbols to be undefined (provided by Roc app at final link)
+    // This lets emscripten resolve libc symbols while keeping Roc symbols as imports
+    emcc.addArgs(&.{
+        "-sERROR_ON_UNDEFINED_SYMBOLS=0",
+        "-sWARN_ON_UNDEFINED_SYMBOLS=1",
+    });
+
+    // Include paths
+    emcc.addArgs(&.{"-Iplatform/vendor/raylib/include"});
+
+    // JavaScript library for console functions
+    emcc.addArg("--js-library");
+    emcc.addFileArg(b.path("platform/web/library.js"));
+
+    // Input files: libhost.a and libraylib.a
+    emcc.addFileArg(wasm_result.host_lib.getEmittedBin());
+    emcc.addFileArg(wasm_result.raylib_archive);
+
+    // Output HTML file (also generates .js and .wasm in same directory)
+    emcc.addArg("-o");
+    const html_output = emcc.addOutputFileArg("host.html");
+
+    // Dependencies
+    emcc.step.dependOn(activate_emsdk);
+    emcc.step.dependOn(&wasm_result.host_lib.step);
+
+    // Install all generated files to zig-out/web/
+    // emcc generates host.html, host.js, and host.wasm
+    const install_html = b.addInstallFile(html_output, "web/host.html");
+    install_html.step.dependOn(&emcc.step);
+
+    // Install the .wasm file (sibling file in same output directory)
+    const output_dir = html_output.dirname();
+    const install_wasm = b.addInstallFile(output_dir.path(b, "host.wasm"), "web/host.wasm");
+    install_wasm.step.dependOn(&emcc.step);
+
+    // Patch host.js for Roc/Zig WASM compatibility
+    // This adds emscripten stubs, dynCall wrappers, GL aliases, and Roc platform functions
+    const patch_js = b.addSystemCommand(&.{"node"});
+    patch_js.addFileArg(b.path("platform/web/patch-host-js.js"));
+    patch_js.addFileArg(output_dir.path(b, "host.js")); // input
+    const patched_js = patch_js.addOutputFileArg("host.js"); // output
+    patch_js.step.dependOn(&emcc.step);
+
+    // Install the patched JS file
+    const install_js = b.addInstallFile(patched_js, "web/host.js");
+    install_js.step.dependOn(&patch_js.step);
+
+    // Build wasm libc (provides malloc, string functions, etc. for Roc linking)
+    const wasm_libc = b.addLibrary(.{
+        .name = "wasm_libc",
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("platform/wasm_libc.zig"),
+            .target = wasm_target,
+            .optimize = optimize,
+        }),
+    });
+
+    // Copy libraries to platform/targets/wasm32/ for Roc bundling
+    const copy_wasm = b.addUpdateSourceFiles();
+    copy_wasm.addCopyFileToSource(
+        wasm_result.host_lib.getEmittedBin(),
+        b.pathJoin(&.{ "platform", "targets", "wasm32", "libhost.a" }),
+    );
+    copy_wasm.addCopyFileToSource(
+        wasm_result.raylib_archive,
+        b.pathJoin(&.{ "platform", "targets", "wasm32", "libraylib.a" }),
+    );
+    copy_wasm.addCopyFileToSource(
+        wasm_libc.getEmittedBin(),
+        b.pathJoin(&.{ "platform", "targets", "wasm32", "libwasm_libc.a" }),
+    );
+
+    // Copy patched JS runtime to platform/web/ for Roc apps
+    copy_wasm.addCopyFileToSource(patched_js, "platform/web/runtime.js");
+    copy_wasm.step.dependOn(&patch_js.step);
+
+    wasm_step.dependOn(&install_html.step);
+    wasm_step.dependOn(&install_js.step);
+    wasm_step.dependOn(&install_wasm.step);
+    wasm_step.dependOn(&copy_wasm.step);
+
+    // Emrun step: serve locally and open in browser
+    const emrun_step = b.step("emrun", "Build WASM and open in browser");
+    const emrun = b.addSystemCommand(&.{
+        zemscripten.emrunPath(b),
+        b.getInstallPath(.prefix, "web/host.html"),
+    });
+    emrun.step.dependOn(&install_html.step);
+    emrun_step.dependOn(&emrun.step);
 }
 
 /// Detect which RocTarget matches the native platform
@@ -268,9 +429,7 @@ const CleanupStep = struct {
 
 const BuildResult = struct {
     host_lib: *std.Build.Step.Compile,
-    raylib_artifact: *std.Build.Step.Compile,
-    /// For Linux: cleaned raylib archive without .so references
-    /// For other platforms: same as raylib_artifact.getEmittedBin()
+    /// Path to the vendored raylib library for bundling
     raylib_archive: std.Build.LazyPath,
     /// For Linux: libc stub with SONAME libc.so.6
     /// For other platforms: null
@@ -278,146 +437,6 @@ const BuildResult = struct {
     /// For Linux: libm stub with SONAME libm.so.6
     /// For other platforms: null
     libm_stub: ?std.Build.LazyPath,
-};
-
-/// Custom step to clean a thin archive by removing .so file references.
-/// On Linux, raylib's thin archive contains paths to system .so files which break
-/// Roc's linker. This step creates a clean archive with only the .o files.
-const CleanArchiveStep = struct {
-    step: std.Build.Step,
-    input_archive: std.Build.LazyPath,
-    output: std.Build.GeneratedFile,
-    /// Unique name suffix to avoid conflicts when building multiple architectures
-    name_suffix: []const u8,
-
-    fn create(b: *std.Build, input_archive: std.Build.LazyPath, name_suffix: []const u8) *CleanArchiveStep {
-        const self = b.allocator.create(CleanArchiveStep) catch @panic("OOM");
-        self.* = .{
-            .step = std.Build.Step.init(.{
-                .id = .custom,
-                .name = "clean-archive",
-                .owner = b,
-                .makeFn = make,
-            }),
-            .input_archive = input_archive,
-            .output = .{ .step = &self.step },
-            .name_suffix = name_suffix,
-        };
-        input_archive.addStepDependencies(&self.step);
-        return self;
-    }
-
-    fn getOutput(self: *CleanArchiveStep) std.Build.LazyPath {
-        return .{ .generated = .{ .file = &self.output } };
-    }
-
-    fn make(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void {
-        _ = options;
-        const b = step.owner;
-        const self: *CleanArchiveStep = @fieldParentPtr("step", step);
-
-        const input_path = self.input_archive.getPath2(b, step);
-
-        // Read the thin archive to get member list
-        const ar_result = std.process.Child.run(.{
-            .allocator = b.allocator,
-            .argv = &.{ "ar", "-t", input_path },
-        }) catch |err| {
-            std.debug.print("Failed to run ar -t: {}\n", .{err});
-            return err;
-        };
-
-        if (ar_result.term.Exited != 0) {
-            std.debug.print("ar -t failed with code {}\n", .{ar_result.term.Exited});
-            return error.ArFailed;
-        }
-
-        // Filter to only .o files (skip .so files)
-        var o_files = std.ArrayListUnmanaged([]const u8){};
-        var lines = std.mem.splitScalar(u8, ar_result.stdout, '\n');
-        while (lines.next()) |line| {
-            if (line.len == 0) continue;
-            if (std.mem.endsWith(u8, line, ".o")) {
-                o_files.append(b.allocator, b.allocator.dupe(u8, line) catch @panic("OOM")) catch @panic("OOM");
-            }
-        }
-
-        // Create output directory
-        const cache_dir = b.cache_root.path orelse ".";
-        const output_dir = std.fs.path.join(b.allocator, &.{ cache_dir, "clean-archives" }) catch @panic("OOM");
-        std.fs.cwd().makePath(output_dir) catch |err| switch (err) {
-            error.PathAlreadyExists => {},
-            else => return err,
-        };
-
-        // Use unique filename per architecture to avoid conflicts
-        const output_filename = std.fmt.allocPrint(b.allocator, "libraylib-clean-{s}.a", .{self.name_suffix}) catch @panic("OOM");
-        const output_path = std.fs.path.join(b.allocator, &.{ output_dir, output_filename }) catch @panic("OOM");
-
-        // Create a temp directory and extract .o files there (unique per arch)
-        const tmp_dirname = std.fmt.allocPrint(b.allocator, "ar-extract-tmp-{s}", .{self.name_suffix}) catch @panic("OOM");
-        const tmp_dir = std.fs.path.join(b.allocator, &.{ cache_dir, tmp_dirname }) catch @panic("OOM");
-
-        // Clean up and recreate tmp dir
-        std.fs.cwd().deleteTree(tmp_dir) catch {};
-        std.fs.cwd().makePath(tmp_dir) catch |err| return err;
-        defer std.fs.cwd().deleteTree(tmp_dir) catch {};
-
-        // Extract .o files from original archive
-        for (o_files.items) |o_file| {
-            // For thin archives, the path might be absolute or relative to .zig-cache
-            // We need to copy the actual .o file
-            const o_basename = std.fs.path.basename(o_file);
-            const dest_path = std.fs.path.join(b.allocator, &.{ tmp_dir, o_basename }) catch @panic("OOM");
-
-            // Try to copy from the path in the archive (which might be relative or absolute)
-            std.fs.cwd().copyFile(o_file, std.fs.cwd(), dest_path, .{}) catch |err| {
-                // If the path is relative to build root, try that
-                const from_build_root = std.fs.path.join(b.allocator, &.{ b.build_root.path orelse ".", o_file }) catch @panic("OOM");
-                std.fs.cwd().copyFile(from_build_root, std.fs.cwd(), dest_path, .{}) catch {
-                    std.debug.print("Warning: Could not copy {s}: {}\n", .{ o_file, err });
-                    continue;
-                };
-            };
-        }
-
-        // Create new archive from extracted .o files
-        // First, delete old output if exists
-        std.fs.cwd().deleteFile(output_path) catch {};
-
-        // Build ar command
-        var ar_args = std.ArrayListUnmanaged([]const u8){};
-        ar_args.append(b.allocator, "ar") catch @panic("OOM");
-        ar_args.append(b.allocator, "rcs") catch @panic("OOM");
-        ar_args.append(b.allocator, output_path) catch @panic("OOM");
-
-        // Add all .o files from tmp dir
-        var dir = std.fs.cwd().openDir(tmp_dir, .{ .iterate = true }) catch |err| return err;
-        defer dir.close();
-
-        var iter = dir.iterate();
-        while (iter.next() catch |err| return err) |entry| {
-            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".o")) {
-                const full_path = std.fs.path.join(b.allocator, &.{ tmp_dir, entry.name }) catch @panic("OOM");
-                ar_args.append(b.allocator, full_path) catch @panic("OOM");
-            }
-        }
-
-        const create_result = std.process.Child.run(.{
-            .allocator = b.allocator,
-            .argv = ar_args.items,
-        }) catch |err| {
-            std.debug.print("Failed to create archive: {}\n", .{err});
-            return err;
-        };
-
-        if (create_result.term.Exited != 0) {
-            std.debug.print("ar rcs failed: {s}\n", .{create_result.stderr});
-            return error.ArCreateFailed;
-        }
-
-        self.output.path = output_path;
-    }
 };
 
 /// X11 libraries that raylib depends on (need stubs for cross-compilation)
@@ -525,16 +544,13 @@ fn buildHostLib(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     builtins_module: *std.Build.Module,
+    roc_target: RocTarget,
 ) BuildResult {
-    // Get raylib dependency for this target
-    // Always use ReleaseFast for raylib to avoid sanitizer symbols (ubsan, etc.)
-    // that would require linking against sanitizer runtime libraries
-    const raylib_dep = b.dependency("raylib_zig", .{
-        .target = target,
-        .optimize = .ReleaseFast,
-    });
-    const raylib_module = raylib_dep.module("raylib");
-    const raylib_artifact = raylib_dep.artifact("raylib");
+    // Use vendored raylib instead of building from source
+    // This uses official pre-built raylib libraries for each platform
+    const raylib_include_path = b.path("platform/vendor/raylib/include");
+    const raylib_lib_dir = b.pathJoin(&.{ "platform", "vendor", "raylib", roc_target.vendoredRaylibDir() });
+    const raylib_lib_path = b.path(raylib_lib_dir);
 
     const host_lib = b.addLibrary(.{
         .name = "host",
@@ -547,10 +563,15 @@ fn buildHostLib(
             .pic = true,
             .imports = &.{
                 .{ .name = "builtins", .module = builtins_module },
-                .{ .name = "raylib", .module = raylib_module },
             },
         }),
     });
+
+    // Add raylib include path for @cImport("raylib.h")
+    host_lib.root_module.addIncludePath(raylib_include_path);
+
+    // Add vendored raylib library path
+    host_lib.root_module.addLibraryPath(raylib_lib_path);
 
     // For macOS cross-compilation, add framework paths from our bundled sysroot
     if (target.result.os.tag == .macos) {
@@ -558,34 +579,35 @@ fn buildHostLib(
         const sysroot_lib = b.path("platform/targets/macos-sysroot/usr/lib");
         host_lib.root_module.addSystemFrameworkPath(sysroot_frameworks);
         host_lib.root_module.addLibraryPath(sysroot_lib);
-        // Also add to raylib artifact
-        raylib_artifact.root_module.addSystemFrameworkPath(sysroot_frameworks);
-        raylib_artifact.root_module.addLibraryPath(sysroot_lib);
     }
 
     // For Linux cross-compilation, use X11 stub libraries and system headers
     if (target.result.os.tag == .linux) {
         const stubs_path = b.path("platform/targets/linux-x11-stubs");
-        raylib_artifact.root_module.addLibraryPath(stubs_path);
         host_lib.root_module.addLibraryPath(stubs_path);
 
         // Add system include paths for X11 and GL headers (architecture-independent)
-        raylib_artifact.root_module.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
+        host_lib.root_module.addSystemIncludePath(.{ .cwd_relative = "/usr/include" });
     }
 
-    // Link raylib into the host library
-    host_lib.linkLibrary(raylib_artifact);
-
     // Force bundle compiler-rt to resolve runtime symbols like __main
-    host_lib.bundle_compiler_rt = true;
+    // (not needed for WASM targets which use emscripten runtime)
+    if (target.result.os.tag != .emscripten and target.result.cpu.arch != .wasm32) {
+        host_lib.bundle_compiler_rt = true;
+    }
 
-    // For Linux, create a clean archive without .so file references
-    // The thin archive from raylib-zig contains system .so paths that break Roc's linker
-    const raylib_archive: std.Build.LazyPath = if (target.result.os.tag == .linux) blk: {
-        const arch_name = @tagName(target.result.cpu.arch);
-        const clean_step = CleanArchiveStep.create(b, raylib_artifact.getEmittedBin(), arch_name);
-        break :blk clean_step.getOutput();
-    } else raylib_artifact.getEmittedBin();
+    // For WASM, skip desktop-specific setup (emcc will link raylib later)
+    if (target.result.cpu.arch == .wasm32) {
+        return .{
+            .host_lib = host_lib,
+            .raylib_archive = b.path(b.pathJoin(&.{ raylib_lib_dir, "libraylib.a" })),
+            .libc_stub = null,
+            .libm_stub = null,
+        };
+    }
+
+    // Get vendored raylib library path
+    const raylib_archive = b.path(b.pathJoin(&.{ raylib_lib_dir, "libraylib.a" }));
 
     // For Linux, generate libc stub with SONAME libc.so.6
     const libc_stub: ?std.Build.LazyPath = if (target.result.os.tag == .linux) blk: {
@@ -601,7 +623,6 @@ fn buildHostLib(
 
     return .{
         .host_lib = host_lib,
-        .raylib_artifact = raylib_artifact,
         .raylib_archive = raylib_archive,
         .libc_stub = libc_stub,
         .libm_stub = libm_stub,
