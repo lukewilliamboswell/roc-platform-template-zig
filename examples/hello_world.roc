@@ -20,8 +20,6 @@ render! = |model, state| {
     # Circle follows the mouse, changes color when clicked
     circle_color = if state.mouse.left { Color.Red } else { Color.Green }
 
-    dbg state
-
     Draw.draw!(RayWhite, || {
         Draw.text!({ pos: { x: 10, y: 10 }, text: model.message, size: 30, color: Color.DarkGray })
         Draw.rectangle!({ x: 100, y: 200, width: 100, height: 80, color: Color.Red })

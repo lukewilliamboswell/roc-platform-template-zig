@@ -1,52 +1,36 @@
 ///! Platform host for roc-ray - a Roc platform for raylib graphics.
+///! This file is for NATIVE builds only. Web/WASM builds use host_web.zig.
 const std = @import("std");
 const builtin = @import("builtin");
 const builtins = @import("builtins");
 
-/// Detect WASM target (freestanding wasm32)
-const is_wasm = builtin.cpu.arch == .wasm32;
+// Import shared Roc ABI types
+const roc_types = @import("roc_types.zig");
+const RocStr = roc_types.RocStr;
+const RocList = roc_types.RocList;
+const RocBox = roc_types.RocBox;
+const RocVector2 = roc_types.RocVector2;
+const RocPlatformState = roc_types.RocPlatformState;
+const RocRectangle = roc_types.RocRectangle;
+const RocCircle = roc_types.RocCircle;
+const RocLine = roc_types.RocLine;
+const RocText = roc_types.RocText;
+const Try_BoxModel_I64 = roc_types.Try_BoxModel_I64;
+const RenderArgs = roc_types.RenderArgs;
+const RocOps = roc_types.RocOps;
+const HostedFn = roc_types.HostedFn;
+const Color = roc_types.Color;
+const roc__init_for_host = roc_types.roc__init_for_host;
+const roc__render_for_host = roc_types.roc__render_for_host;
 
-// Direct C interop with raylib (no wrapper dependency)
+// This file is native-only - WASM uses host_web.zig
+const is_wasm = false;
+
+// Direct C interop with raylib
 const rl = @cImport({
     @cInclude("raylib.h");
     @cInclude("rlgl.h");
 });
-
-// GLFW extern declarations for WASM builds (implementations provided by emscripten's -sUSE_GLFW=3)
-// We declare these as extern rather than @cImport because GLFW headers are in emscripten's sysroot
-const glfw = if (is_wasm) struct {
-    pub extern fn glfwGetProcAddress(procname: [*:0]const u8) ?*anyopaque;
-    pub extern fn glfwGetWindowAttrib(window: ?*anyopaque, attrib: i32) i32;
-    pub extern fn glfwSetCursorPos(window: ?*anyopaque, xpos: f64, ypos: f64) void;
-    pub extern fn glfwSetWindowAttrib(window: ?*anyopaque, attrib: i32, value: i32) void;
-    pub extern fn glfwSetWindowSize(window: ?*anyopaque, width: i32, height: i32) void;
-} else struct {};
-
-// Emscripten HTML5 API extern declarations (used by raylib for browser interaction)
-const emscripten = if (is_wasm) struct {
-    pub extern fn emscripten_sleep(ms: c_uint) void;
-    pub extern fn emscripten_asm_const_int(code: [*:0]const u8, sig: [*:0]const u8, args: ?*anyopaque) c_int;
-    pub extern fn emscripten_set_window_title(title: [*:0]const u8) void;
-    pub extern fn emscripten_set_canvas_element_size(target: [*:0]const u8, width: c_int, height: c_int) c_int;
-    pub extern fn emscripten_exit_pointerlock() c_int;
-    pub extern fn emscripten_request_pointerlock(target: [*:0]const u8, defer_until_in_event: c_int) c_int;
-    pub extern fn emscripten_run_script(script: [*:0]const u8) void;
-    pub extern fn emscripten_sample_gamepad_data() c_int;
-    pub extern fn emscripten_get_num_gamepads() c_int;
-    pub extern fn emscripten_get_gamepad_status(index: c_int, state: ?*anyopaque) c_int;
-    pub extern fn emscripten_set_fullscreenchange_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
-    pub extern fn emscripten_set_resize_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
-    pub extern fn emscripten_set_click_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
-    pub extern fn emscripten_set_pointerlockchange_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
-    pub extern fn emscripten_set_mousemove_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
-    pub extern fn emscripten_set_touchstart_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
-    pub extern fn emscripten_set_touchend_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
-    pub extern fn emscripten_set_touchmove_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
-    pub extern fn emscripten_set_touchcancel_callback_on_thread(target: [*:0]const u8, user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
-    pub extern fn emscripten_set_gamepadconnected_callback_on_thread(user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
-    pub extern fn emscripten_set_gamepaddisconnected_callback_on_thread(user: ?*anyopaque, use_capture: c_int, callback: ?*anyopaque, thread: c_int) c_int;
-    pub extern fn emscripten_get_element_css_size(target: [*:0]const u8, width: *f64, height: *f64) c_int;
-} else struct {};
 
 const TRACE_ALLOCATIONS = false;
 const TRACE_HOST = false;
@@ -273,63 +257,13 @@ fn rocCrashedFn(roc_crashed: *const builtins.host_abi.RocCrashed, env: *anyopaqu
     }
 }
 
-// A RocBox is an opaque pointer to a Roc heap-allocated value
-const RocBox = *anyopaque;
-
 /// Decrement the reference count of a RocBox
 /// If the refcount reaches zero, the memory is freed
-fn decrefRocBox(box: RocBox, roc_ops: *builtins.host_abi.RocOps) void {
+fn decrefRocBox(box: RocBox, roc_ops: *RocOps) void {
     const ptr: ?[*]u8 = @ptrCast(box);
     // Box alignment is pointer-width, elements are not refcounted at this level
     builtins.utils.decrefDataPtrC(ptr, @alignOf(usize), false, roc_ops);
 }
-
-/// Runtime layout for the roc type `Try(Box(Model), I64)`
-const Try_BoxModel_I64 = extern struct {
-    /// Box(Model) or I64 (8 bytes)
-    payload: extern union { ok: RocBox, err: i64 },
-    /// 0 = Err, 1 = Ok (1 byte)
-    discriminant: u8,
-    /// Padding (not_used) to maintain 8-byte alignment
-    _padding: [7]u8,
-
-    pub fn isOk(self: Try_BoxModel_I64) bool {
-        return self.discriminant == 1;
-    }
-
-    pub fn isErr(self: Try_BoxModel_I64) bool {
-        return self.discriminant == 0;
-    }
-
-    pub fn getModel(self: Try_BoxModel_I64) RocBox {
-        return self.payload.ok;
-    }
-
-    pub fn getErrCode(self: Try_BoxModel_I64) i64 {
-        return self.payload.err;
-    }
-};
-
-/// Roc PlatformStateFromHost type layout (alignment desc, then alphabetical)
-const RocPlatformState = extern struct {
-    frame_count: u64, // @0 (align 8)
-    mouse_wheel: f32, // @8 (align 4, "wheel" < "x" < "y")
-    mouse_x: f32, // @12
-    mouse_y: f32, // @16
-    mouse_left: bool, // @20 (align 1, "left" < "middle" < "right")
-    mouse_middle: bool, // @21
-    mouse_right: bool, // @22
-};
-
-/// Args tuple for render_for_host! : Box(Model), PlatformStateFromHost => ...
-/// Per RocCall ABI, all args are passed as a single pointer to a tuple struct
-const RenderArgs = extern struct {
-    model: RocBox,
-    state: RocPlatformState,
-};
-
-extern fn roc__init_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *Try_BoxModel_I64, arg_ptr: ?*anyopaque) callconv(.c) void;
-extern fn roc__render_for_host(ops: *builtins.host_abi.RocOps, ret_ptr: *Try_BoxModel_I64, args_ptr: *RenderArgs) callconv(.c) void;
 
 // OS-specific entry point handling (not exported during tests)
 comptime {
@@ -352,52 +286,6 @@ fn __main() callconv(.c) void {}
 fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
     return platform_main(@intCast(argc), argv);
 }
-
-// Use the actual types from builtins
-const RocStr = builtins.str.RocStr;
-const RocList = builtins.list.RocList;
-
-/// Roc Vector2 type layout: { x: F32, y: F32 }
-/// Fields ordered by alignment then alphabetically: x, y
-const RocVector2 = extern struct {
-    x: f32,
-    y: f32,
-};
-
-/// Roc Rectangle type layout: { x, y, width, height: F32, color: Color }
-/// Fields ordered by alignment (4 bytes for F32) then alphabetically, then 1-byte fields
-const RocRectangle = extern struct {
-    height: f32,
-    width: f32,
-    x: f32,
-    y: f32,
-    color: u8,
-};
-
-/// Roc Circle type layout: { center: Vector2, radius: F32, color: Color }
-/// Fields ordered by alignment then alphabetically: center, radius, color
-const RocCircle = extern struct {
-    center: RocVector2,
-    radius: f32,
-    color: u8,
-};
-
-/// Roc Line type layout: { start: Vector2, end: Vector2, color: Color }
-/// Fields ordered by alignment then alphabetically: end, start, color
-const RocLine = extern struct {
-    end: RocVector2,
-    start: RocVector2,
-    color: u8,
-};
-
-/// Roc Text type layout: { pos: Vector2, text: Str, size: I32, color: Color }
-/// Fields ordered by alignment then alphabetically: text (8), pos (4), size (4), color (1)
-const RocText = extern struct {
-    text: RocStr,
-    pos: RocVector2,
-    size: i32,
-    color: u8,
-};
 
 /// Convert Roc Color tag union discriminant to raylib Color
 /// Tags sorted alphabetically: Black=0, Blue=1, DarkGray=2, Gray=3, Green=4,
@@ -422,7 +310,7 @@ fn rocColorToRaylib(discriminant: u8) rl.Color {
 }
 
 /// Hosted function: Draw.begin_frame! (index 0 alphabetically)
-fn hostedDrawBeginFrame(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+fn hostedDrawBeginFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ops;
     _ = ret_ptr;
     _ = args_ptr;
@@ -430,7 +318,7 @@ fn hostedDrawBeginFrame(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, arg
 }
 
 /// Hosted function: Draw.circle! (index 1 alphabetically)
-fn hostedDrawCircle(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+fn hostedDrawCircle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ops;
     _ = ret_ptr;
     const circle: *const RocCircle = @ptrCast(@alignCast(args_ptr));
@@ -443,7 +331,7 @@ fn hostedDrawCircle(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_pt
 }
 
 /// Hosted function: Draw.clear! (index 2 alphabetically)
-fn hostedDrawClear(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+fn hostedDrawClear(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ops;
     _ = ret_ptr;
     const color_discriminant: *const u8 = @ptrCast(args_ptr);
@@ -451,7 +339,7 @@ fn hostedDrawClear(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr
 }
 
 /// Hosted function: Draw.end_frame! (index 3 alphabetically)
-fn hostedDrawEndFrame(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+fn hostedDrawEndFrame(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ops;
     _ = ret_ptr;
     _ = args_ptr;
@@ -459,7 +347,7 @@ fn hostedDrawEndFrame(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_
 }
 
 /// Hosted function: Draw.line! (index 4 alphabetically)
-fn hostedDrawLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+fn hostedDrawLine(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ops;
     _ = ret_ptr;
     const line: *const RocLine = @ptrCast(@alignCast(args_ptr));
@@ -473,7 +361,7 @@ fn hostedDrawLine(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr:
 }
 
 /// Hosted function: Draw.rectangle! (index 5 alphabetically)
-fn hostedDrawRectangle(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+fn hostedDrawRectangle(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ops;
     _ = ret_ptr;
     const rect: *const RocRectangle = @ptrCast(@alignCast(args_ptr));
@@ -487,7 +375,7 @@ fn hostedDrawRectangle(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args
 }
 
 /// Hosted function: Draw.text! (index 6 alphabetically)
-fn hostedDrawText(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
+fn hostedDrawText(ops: *RocOps, ret_ptr: *anyopaque, args_ptr: *anyopaque) callconv(.c) void {
     _ = ops;
     _ = ret_ptr;
     const txt: *const RocText = @ptrCast(@alignCast(args_ptr));
@@ -503,7 +391,7 @@ fn hostedDrawText(ops: *builtins.host_abi.RocOps, ret_ptr: *anyopaque, args_ptr:
 
 /// Array of hosted function pointers, sorted alphabetically by fully-qualified name
 /// Order: Draw.begin_frame!, Draw.circle!, Draw.clear!, Draw.end_frame!, Draw.line!, Draw.rectangle!, Draw.text!
-const hosted_function_ptrs = [_]builtins.host_abi.HostedFn{
+const hosted_function_ptrs = [_]HostedFn{
     hostedDrawBeginFrame, // Draw.begin_frame! (0)
     hostedDrawCircle, // Draw.circle! (1)
     hostedDrawClear, // Draw.clear! (2)
@@ -625,43 +513,6 @@ fn forceIncludeGLFunctions() void {
     _ = rl.rlLoadDrawCube;
     _ = rl.rlLoadDrawQuad;
 
-    // GLFW functions (only for WASM builds, provided by emscripten's -sUSE_GLFW=3)
-    // Force emscripten to include these by generating actual call instructions
-    if (is_wasm) {
-        // These calls are in dead code (the function is never called with flag=true)
-        // but they force the compiler to include the GLFW function imports
-        _ = glfw.glfwGetProcAddress("dummy");
-        _ = glfw.glfwGetWindowAttrib(null, 0);
-        glfw.glfwSetCursorPos(null, 0, 0);
-        glfw.glfwSetWindowAttrib(null, 0, 0);
-        glfw.glfwSetWindowSize(null, 0, 0);
-
-        // Emscripten HTML5 API functions (used by raylib for browser interaction)
-        emscripten.emscripten_sleep(0);
-        _ = emscripten.emscripten_asm_const_int("", "", null);
-        emscripten.emscripten_set_window_title("");
-        _ = emscripten.emscripten_set_canvas_element_size("", 0, 0);
-        _ = emscripten.emscripten_exit_pointerlock();
-        _ = emscripten.emscripten_request_pointerlock("", 0);
-        emscripten.emscripten_run_script("");
-        _ = emscripten.emscripten_sample_gamepad_data();
-        _ = emscripten.emscripten_get_num_gamepads();
-        _ = emscripten.emscripten_get_gamepad_status(0, null);
-        _ = emscripten.emscripten_set_fullscreenchange_callback_on_thread("", null, 0, null, 0);
-        _ = emscripten.emscripten_set_resize_callback_on_thread("", null, 0, null, 0);
-        _ = emscripten.emscripten_set_click_callback_on_thread("", null, 0, null, 0);
-        _ = emscripten.emscripten_set_pointerlockchange_callback_on_thread("", null, 0, null, 0);
-        _ = emscripten.emscripten_set_mousemove_callback_on_thread("", null, 0, null, 0);
-        _ = emscripten.emscripten_set_touchstart_callback_on_thread("", null, 0, null, 0);
-        _ = emscripten.emscripten_set_touchend_callback_on_thread("", null, 0, null, 0);
-        _ = emscripten.emscripten_set_touchmove_callback_on_thread("", null, 0, null, 0);
-        _ = emscripten.emscripten_set_touchcancel_callback_on_thread("", null, 0, null, 0);
-        _ = emscripten.emscripten_set_gamepadconnected_callback_on_thread(null, 0, null, 0);
-        _ = emscripten.emscripten_set_gamepaddisconnected_callback_on_thread(null, 0, null, 0);
-        var w: f64 = 0;
-        var h: f64 = 0;
-        _ = emscripten.emscripten_get_element_css_size("", &w, &h);
-    }
 }
 
 // Force the compiler to include the GL/GLFW function references by exporting
@@ -685,7 +536,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     };
 
     // Create the RocOps struct
-    var roc_ops = builtins.host_abi.RocOps{
+    var roc_ops = RocOps{
         .env = @as(*anyopaque, @ptrCast(&host_env)),
         .roc_alloc = rocAllocFn,
         .roc_dealloc = rocDeallocFn,
@@ -825,7 +676,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
 }
 
 /// Build a RocList of RocStr from argc/argv
-fn buildStrArgsList(argc: usize, argv: [*][*:0]u8, roc_ops: *builtins.host_abi.RocOps) RocList {
+fn buildStrArgsList(argc: usize, argv: [*][*:0]u8, roc_ops: *RocOps) RocList {
     if (argc == 0) {
         return RocList.empty();
     }

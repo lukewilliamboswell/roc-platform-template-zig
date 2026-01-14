@@ -4,21 +4,8 @@
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .roc = .{
-            // If you change the url here, change e.g. a single digit in the hash, that will make zig show you the correct hash after running `zig build`.
             .url = "git+https://github.com/roc-lang/roc#eb723404c4ef5d37cc279a7fd090a3ba76f6b9dc",
-            // After running `zig build`, Zig will provide the correct hash
-            // which you should paste here to replace this placeholder
             .hash = "roc-0.0.0-NAC9wxOemgBT7iBlgi-QM__Nroz_aUd4YS4ohKre_ZRM",
-        },
-        // Emscripten SDK for WASM builds
-        .emsdk = .{
-            .url = "git+https://github.com/emscripten-core/emsdk#4.0.9",
-            .hash = "N-V-__8AAJl1DwBezhYo_VE6f53mPVm00R-Fk28NPW7P14EQ",
-        },
-        // Zig-Emscripten integration for WASM builds
-        .zemscripten = .{
-            .url = "git+https://github.com/zig-gamedev/zemscripten?ref=main#00da03b188220374a57cb34cda6230b8d53737ea",
-            .hash = "zemscripten-0.2.0-dev-sRlDqFJSAAB8hgnRt5DDMKP3zLlDtMnUDwYRJVCa5lGY",
         },
     },
     .fingerprint = 0xb91745a94628a7e0,

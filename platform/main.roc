@@ -23,7 +23,7 @@ platform ""
 		## WASM target produces a static library that needs emcc post-processing
 		## libwasm_libc.a provides C library stubs for web builds
 		static_lib: {
-			wasm32: ["libhost.a", "libraylib.a", "libwasm_libc.a", app],
+			wasm32: ["libhost.a", app],
 		}
 	}
 
