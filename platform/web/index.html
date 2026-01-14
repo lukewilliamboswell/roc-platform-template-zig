@@ -41,16 +41,15 @@
     <div id="status">Loading...</div>
     <canvas id="canvas" width="800" height="600" tabindex="0"></canvas>
 
-    <script src="host.js"></script>
-    <script>
+    <script type="module">
+        import { init } from './host.js';
+
         const status = document.getElementById('status');
 
-        // Initialize with default wasm file
-        RocHost.init('app.wasm', 'canvas')
+        init('app.wasm', 'canvas')
             .then(() => {
                 status.textContent = 'Running';
                 status.className = 'ready';
-                // Focus canvas for keyboard input (future feature)
                 document.getElementById('canvas').focus();
             })
             .catch(err => {

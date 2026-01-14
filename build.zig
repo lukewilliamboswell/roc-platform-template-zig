@@ -164,113 +164,43 @@ pub fn build(b: *std.Build) void {
     copy_all.addCopyFileToSource(b.path("platform/web/index.html"), "platform/web/index.html");
 
     // ========================================================================
-    // Native step: build only for the current platform
+    // Test step: Zig unit tests + WASM integration tests
     // ========================================================================
-    const native_step = b.step("native", "Build host library for native platform only");
-    native_step.dependOn(cleanup_step);
+    const test_step = b.step("test", "Run all tests");
 
+    // Zig unit tests for host_native.zig
     const native_target = b.standardTargetOptions(.{});
+    const native_roc_target = detectNativeRocTarget(native_target.result);
 
-    const native_roc_target = detectNativeRocTarget(native_target.result) orelse {
-        std.debug.print("Unsupported native platform\n", .{});
-        return;
-    };
+    if (native_roc_target) |roc_target| {
+        const raylib_lib_dir = b.pathJoin(&.{ "vendor", "raylib", roc_target.vendoredRaylibDir() });
 
-    const native_result = buildHostLib(b, native_target, optimize, builtins_module, native_roc_target);
-
-    if (native_target.result.os.tag == .linux) {
-        native_result.host_lib.step.dependOn(gen_stubs);
+        const native_tests = b.addTest(.{
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("platform/host_native.zig"),
+                .target = native_target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "builtins", .module = builtins_module },
+                },
+            }),
+        });
+        native_tests.root_module.addIncludePath(b.path("vendor/raylib/include"));
+        native_tests.root_module.addLibraryPath(b.path(raylib_lib_dir));
+        native_tests.linkSystemLibrary("raylib");
+        native_tests.linkLibC();
+        const run_native_tests = b.addRunArtifact(native_tests);
+        test_step.dependOn(&run_native_tests.step);
     }
 
-    b.installArtifact(native_result.host_lib);
-
-    const copy_native = b.addUpdateSourceFiles();
-    copy_native.addCopyFileToSource(
-        native_result.host_lib.getEmittedBin(),
-        b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), native_roc_target.libFilename() }),
-    );
-
-    copy_native.addCopyFileToSource(
-        native_result.raylib_archive,
-        b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), "libraylib.a" }),
-    );
-
-    if (native_result.libc_stub) |libc_stub| {
-        copy_native.addCopyFileToSource(
-            libc_stub,
-            b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), "libc.so" }),
-        );
-    }
-
-    if (native_result.libm_stub) |libm_stub| {
-        copy_native.addCopyFileToSource(
-            libm_stub,
-            b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), "libm.so" }),
-        );
-    }
-
-    native_step.dependOn(&copy_native.step);
-    native_step.dependOn(&native_result.host_lib.step);
-
-    // Also build WASM when running native step (convenience for development)
-    const copy_wasm_native = b.addUpdateSourceFiles();
-    copy_wasm_native.addCopyFileToSource(
-        wasm_host.getEmittedBin(),
-        "platform/targets/wasm32/libhost.a",
-    );
-    copy_wasm_native.addCopyFileToSource(b.path("platform/web/host.js"), "platform/web/host.js");
-    copy_wasm_native.addCopyFileToSource(b.path("platform/web/index.html"), "platform/web/index.html");
-    native_step.dependOn(&copy_wasm_native.step);
-
-    // ========================================================================
-    // Test step: run unit tests and integration tests
-    // ========================================================================
-    const test_step = b.step("test", "Run all tests (unit tests and integration tests)");
-
-    const host_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("platform/host.zig"),
-            .target = native_target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "builtins", .module = builtins_module },
-            },
-        }),
-    });
-    host_tests.root_module.addIncludePath(b.path("vendor/raylib/include"));
-
-    const run_host_tests = b.addRunArtifact(host_tests);
-
-    const test_runner = b.addExecutable(.{
-        .name = "test_runner",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("ci/test_runner.zig"),
-            .target = native_target,
-            .optimize = optimize,
-        }),
-    });
-
-    const run_integration = b.addRunArtifact(test_runner);
-    run_integration.step.dependOn(&copy_native.step);
-    run_integration.step.dependOn(&run_host_tests.step);
-    if (b.args) |args| {
-        run_integration.addArgs(args);
-    }
-
-    test_step.dependOn(&run_integration.step);
-
-    // ========================================================================
-    // WASM-TEST step: Build standalone test WASM for JS round-trip testing
-    // ========================================================================
-    const wasm_test_step = b.step("wasm-test", "Build test WASM module for JS round-trip testing");
-
+    // Build standalone test WASM module (exports test functions, no Roc app)
     const wasm_test_exe = b.addExecutable(.{
         .name = "host_web",
         .root_module = b.createModule(.{
             .root_source_file = b.path("platform/host_web.zig"),
             .target = wasm_target,
             .optimize = optimize,
-            .strip = false, // Preserve debug info
+            .strip = false,
             .imports = &.{
                 .{ .name = "builtins", .module = builtins_module },
             },
@@ -279,24 +209,12 @@ pub fn build(b: *std.Build) void {
     wasm_test_exe.entry = .disabled;
     wasm_test_exe.rdynamic = true;
 
-    b.installArtifact(wasm_test_exe);
-
     const install_test_wasm = b.addInstallFile(wasm_test_exe.getEmittedBin(), "web-test/host_web.wasm");
-    wasm_test_step.dependOn(&install_test_wasm.step);
 
-    const install_test_html = b.addInstallFile(b.path("platform/web/test.html"), "web-test/test.html");
-    wasm_test_step.dependOn(&install_test_html.step);
-
-    // Serve step: start local server for wasm-test
-    const serve_step = b.step("serve-test", "Build wasm-test and serve with Python http.server");
-    serve_step.dependOn(wasm_test_step);
-
-    const serve_cmd = b.addSystemCommand(&.{
-        "python3",     "-m",                                  "http.server", "8080",
-        "--directory", b.getInstallPath(.prefix, "web-test"),
-    });
-    serve_cmd.step.dependOn(wasm_test_step);
-    serve_step.dependOn(&serve_cmd.step);
+    // Run Node.js integration tests
+    const node_test = b.addSystemCommand(&.{ "node", "ci/wasm-test.mjs" });
+    node_test.step.dependOn(&install_test_wasm.step);
+    test_step.dependOn(&node_test.step);
 }
 
 /// Detect which RocTarget matches the native platform

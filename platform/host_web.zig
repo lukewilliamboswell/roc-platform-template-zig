@@ -1,8 +1,15 @@
 ///! Web platform host for roc-ray - command buffer based rendering for Canvas 2D/WebGL
-///! This file is used ONLY for WASM builds. Native builds use host.zig with raylib.
+///! This file is used ONLY for WASM builds. Native builds use host_native.zig with raylib.
 const std = @import("std");
 const builtin = @import("builtin");
 const builtins = @import("builtins");
+
+// Compile-time check: this file is WASM-only
+comptime {
+    if (builtin.cpu.arch != .wasm32) {
+        @compileError("host_web.zig is only for wasm32 target. Use host_native.zig for native builds.");
+    }
+}
 
 // Import shared Roc ABI types (same definitions as native host)
 const roc_types = @import("roc_types.zig");
@@ -24,6 +31,7 @@ const RocRealloc = roc_types.RocRealloc;
 const RocDbg = roc_types.RocDbg;
 const RocExpectFailed = roc_types.RocExpectFailed;
 const RocCrashed = roc_types.RocCrashed;
+// Roc functions (provided at link time by Roc compiler)
 const roc__init_for_host = roc_types.roc__init_for_host;
 const roc__render_for_host = roc_types.roc__render_for_host;
 
@@ -109,11 +117,10 @@ pub const CommandBuffer = struct {
 var cmd_buffer: CommandBuffer = .{};
 
 // ============================================================================
-// Memory Management (wasm_allocator vtable - works on freestanding)
+// Memory Management
 // ============================================================================
 
-const wasm_allocator = std.heap.wasm_allocator;
-const allocator_vtable = wasm_allocator.vtable;
+const allocator_vtable = std.heap.wasm_allocator.vtable;
 
 // RocOps callback implementations
 fn rocAllocFn(args: *RocAlloc, env: *anyopaque) callconv(.c) void {
@@ -248,9 +255,9 @@ export fn roc_realloc(ptr: [*]u8, new_size: usize, _: usize, alignment: u32) cal
     return @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes);
 }
 
-// Import logging functions from JS
-extern fn js_console_log(ptr: [*]const u8, len: usize) callconv(.c) void;
-extern fn js_throw_error(ptr: [*]const u8, len: usize) callconv(.c) noreturn;
+// JavaScript imports (provided by host.js at runtime)
+extern fn js_console_log(ptr: [*]const u8, len: usize) void;
+extern fn js_throw_error(ptr: [*]const u8, len: usize) noreturn;
 
 // RocOps callback implementations
 fn rocDbgFn(dbg_info: *const RocDbg, env: *anyopaque) callconv(.c) void {

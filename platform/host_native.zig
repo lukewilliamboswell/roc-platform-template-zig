@@ -512,7 +512,6 @@ fn forceIncludeGLFunctions() void {
     // Drawing primitives (to ensure basic GL calls are included)
     _ = rl.rlLoadDrawCube;
     _ = rl.rlLoadDrawQuad;
-
 }
 
 // Force the compiler to include the GL/GLFW function references by exporting
