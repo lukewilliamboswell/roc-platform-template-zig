@@ -1,6 +1,14 @@
 // ci/wasm-test.mjs
 // Node.js WASM Command Buffer Integration Tests
 // Runs without browser - tests deterministic command buffer output
+//
+// This test validates the WASM host layer in ISOLATION. It catches:
+//   - Command buffer layout/struct offset bugs
+//   - Command encoding issues (type + index packing)
+//   - Data integrity for all draw primitives (rect, circle, line, text)
+//   - String buffer encoding/decoding
+//   - Command ordering preservation
+//   - Buffer capacity enforcement
 
 import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';

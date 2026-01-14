@@ -42,7 +42,13 @@
     <canvas id="canvas" width="800" height="600" tabindex="0"></canvas>
 
     <script type="module">
-        import { init } from './host.js';
+        import { init, getMemoryStats, logMemoryStats, resetMemoryStats } from './host.js';
+
+        // Expose memory telemetry helpers on window for console access
+        // Usage: memoryStats() or logMemory() in browser console
+        window.memoryStats = getMemoryStats;
+        window.logMemory = logMemoryStats;
+        window.resetMemory = resetMemoryStats;
 
         const status = document.getElementById('status');
 
@@ -51,6 +57,7 @@
                 status.textContent = 'Running';
                 status.className = 'ready';
                 document.getElementById('canvas').focus();
+                console.log('[host] Memory telemetry available: memoryStats(), logMemory(), resetMemory()');
             })
             .catch(err => {
                 status.textContent = `Error: ${err.message}`;

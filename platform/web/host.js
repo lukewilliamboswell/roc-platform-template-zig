@@ -274,6 +274,66 @@ function frame(timestamp) {
     requestAnimationFrame(frame);
 }
 
+// =============================================================================
+// Memory Telemetry
+// =============================================================================
+
+/**
+ * Get current memory allocation statistics from the WASM module.
+ * Useful for detecting memory leaks - if liveAllocations grows over time,
+ * there's likely a leak.
+ *
+ * @returns {Object} Memory statistics
+ */
+export function getMemoryStats() {
+    if (!wasm) return null;
+
+    const allocCount = Number(wasm._get_alloc_count());
+    const deallocCount = Number(wasm._get_dealloc_count());
+    const reallocCount = Number(wasm._get_realloc_count());
+    const bytesAllocated = Number(wasm._get_bytes_allocated());
+    const bytesFreed = Number(wasm._get_bytes_freed());
+
+    return {
+        allocCount,
+        deallocCount,
+        reallocCount,
+        bytesAllocated,
+        bytesFreed,
+        liveAllocations: allocCount - deallocCount,
+        liveBytes: bytesAllocated - bytesFreed,
+        wasmMemoryBytes: memory ? memory.buffer.byteLength : 0,
+    };
+}
+
+/**
+ * Log memory statistics to console (convenience function)
+ */
+export function logMemoryStats() {
+    const stats = getMemoryStats();
+    if (!stats) {
+        console.log('[memory] WASM not initialized');
+        return;
+    }
+    console.log(`[memory] Live: ${stats.liveAllocations} allocations, ${stats.liveBytes} bytes`);
+    console.log(`[memory] Total: ${stats.allocCount} allocs, ${stats.deallocCount} deallocs, ${stats.reallocCount} reallocs`);
+    console.log(`[memory] Bytes: ${stats.bytesAllocated} allocated, ${stats.bytesFreed} freed`);
+    console.log(`[memory] WASM memory: ${stats.wasmMemoryBytes} bytes`);
+}
+
+/**
+ * Reset memory telemetry counters (useful for per-session tracking)
+ */
+export function resetMemoryStats() {
+    if (wasm && wasm._reset_memory_telemetry) {
+        wasm._reset_memory_telemetry();
+    }
+}
+
+// =============================================================================
+// Rendering
+// =============================================================================
+
 function render() {
     const view = new DataView(memory.buffer, cmdBufferPtr);
 

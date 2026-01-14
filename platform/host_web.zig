@@ -125,6 +125,14 @@ var cmd_buffer: CommandBuffer = .{};
 // Memory Management
 // ============================================================================
 
+// Allocation telemetry - track allocations for leak detection
+// JS can read these via exported getters and log them to detect memory leaks over time
+var alloc_count: u64 = 0;
+var dealloc_count: u64 = 0;
+var realloc_count: u64 = 0;
+var bytes_allocated: u64 = 0;
+var bytes_freed: u64 = 0;
+
 // Conditional allocator: WASM uses wasm_allocator, native uses page_allocator (for testing)
 const allocator_vtable = if (builtin.cpu.arch == .wasm32)
     std.heap.wasm_allocator.vtable
@@ -150,6 +158,10 @@ fn rocAllocFn(args: *RocAlloc, env: *anyopaque) callconv(.c) void {
     const size_ptr: *usize = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes - @sizeOf(usize));
     size_ptr.* = total_size;
 
+    // Track allocation telemetry
+    alloc_count += 1;
+    bytes_allocated += args.length;
+
     // Return pointer to the user data (after the size metadata)
     args.answer = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
 }
@@ -171,6 +183,11 @@ fn rocDeallocFn(args: *RocDealloc, env: *anyopaque) callconv(.c) void {
     const log2_align = std.math.log2_int(u29, @intCast(args.alignment));
     const align_enum: std.mem.Alignment = @enumFromInt(log2_align);
 
+    // Track deallocation telemetry (user bytes = total - metadata)
+    const user_bytes = total_size - size_storage_bytes;
+    dealloc_count += 1;
+    bytes_freed += user_bytes;
+
     // Free the memory (including the size metadata)
     const slice = base_ptr[0..total_size];
     allocator_vtable.free(undefined, slice, align_enum, @returnAddress());
@@ -185,6 +202,7 @@ fn rocReallocFn(args: *RocRealloc, env: *anyopaque) callconv(.c) void {
 
     // Read the old total size from metadata
     const old_total_size = old_size_ptr.*;
+    const old_user_bytes = old_total_size - size_storage_bytes;
 
     // Calculate the old base pointer (start of actual allocation)
     const old_base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(args.answer) - size_storage_bytes);
@@ -201,6 +219,12 @@ fn rocReallocFn(args: *RocRealloc, env: *anyopaque) callconv(.c) void {
         // remap failed, keep old pointer
         return;
     };
+
+    // Track reallocation telemetry
+    realloc_count += 1;
+    // Adjust bytes: freed old user bytes, allocated new user bytes
+    bytes_freed += old_user_bytes;
+    bytes_allocated += args.new_length;
 
     // Store the new total size in the metadata
     const new_size_ptr: *usize = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes - @sizeOf(usize));
@@ -226,6 +250,10 @@ export fn roc_alloc(size: usize, alignment: u32) callconv(.c) ?[*]u8 {
     const size_ptr: *usize = @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes - @sizeOf(usize));
     size_ptr.* = total_size;
 
+    // Track allocation telemetry
+    alloc_count += 1;
+    bytes_allocated += size;
+
     return @ptrFromInt(@intFromPtr(base_ptr) + size_storage_bytes);
 }
 
@@ -239,6 +267,11 @@ export fn roc_dealloc(ptr: [*]u8, alignment: u32) callconv(.c) void {
     const log2_align = std.math.log2_int(u29, @intCast(alignment));
     const align_enum: std.mem.Alignment = @enumFromInt(log2_align);
 
+    // Track deallocation telemetry
+    const user_bytes = total_size - size_storage_bytes;
+    dealloc_count += 1;
+    bytes_freed += user_bytes;
+
     const slice = base_ptr[0..total_size];
     allocator_vtable.free(undefined, slice, align_enum, @returnAddress());
 }
@@ -247,6 +280,7 @@ export fn roc_realloc(ptr: [*]u8, new_size: usize, _: usize, alignment: u32) cal
     const size_storage_bytes = @max(alignment, @alignOf(usize));
     const old_size_ptr: *const usize = @ptrFromInt(@intFromPtr(ptr) - @sizeOf(usize));
     const old_total_size = old_size_ptr.*;
+    const old_user_bytes = old_total_size - size_storage_bytes;
     const old_base_ptr: [*]u8 = @ptrFromInt(@intFromPtr(ptr) - size_storage_bytes);
 
     const new_total_size = new_size + size_storage_bytes;
@@ -257,6 +291,11 @@ export fn roc_realloc(ptr: [*]u8, new_size: usize, _: usize, alignment: u32) cal
     const new_base_ptr = allocator_vtable.remap(undefined, old_slice, align_enum, new_total_size, @returnAddress()) orelse {
         return null;
     };
+
+    // Track reallocation telemetry
+    realloc_count += 1;
+    bytes_freed += old_user_bytes;
+    bytes_allocated += new_size;
 
     const new_size_ptr: *usize = @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes - @sizeOf(usize));
     new_size_ptr.* = new_total_size;
@@ -640,6 +679,54 @@ export fn _get_offset_string_buffer() usize {
 }
 export fn _get_offset_string_buffer_len() usize {
     return @offsetOf(CommandBuffer, "string_buffer_len");
+}
+
+// ============================================================================
+// Memory Telemetry Exports
+// ============================================================================
+// These functions allow JavaScript to monitor memory allocation patterns.
+// Call after _frame() to get current statistics. If (alloc_count - dealloc_count)
+// grows over time, there may be a memory leak.
+//
+// Usage from JS:
+//   const stats = {
+//       allocCount: wasm._get_alloc_count(),
+//       deallocCount: wasm._get_dealloc_count(),
+//       reallocCount: wasm._get_realloc_count(),
+//       bytesAllocated: wasm._get_bytes_allocated(),
+//       bytesFreed: wasm._get_bytes_freed(),
+//   };
+//   const liveAllocations = stats.allocCount - stats.deallocCount;
+//   const liveBytes = stats.bytesAllocated - stats.bytesFreed;
+//   console.log(`Live: ${liveAllocations} allocations, ${liveBytes} bytes`);
+
+export fn _get_alloc_count() u64 {
+    return alloc_count;
+}
+
+export fn _get_dealloc_count() u64 {
+    return dealloc_count;
+}
+
+export fn _get_realloc_count() u64 {
+    return realloc_count;
+}
+
+export fn _get_bytes_allocated() u64 {
+    return bytes_allocated;
+}
+
+export fn _get_bytes_freed() u64 {
+    return bytes_freed;
+}
+
+/// Reset all telemetry counters to zero (useful for per-session tracking)
+export fn _reset_memory_telemetry() void {
+    alloc_count = 0;
+    dealloc_count = 0;
+    realloc_count = 0;
+    bytes_allocated = 0;
+    bytes_freed = 0;
 }
 
 // ============================================================================
