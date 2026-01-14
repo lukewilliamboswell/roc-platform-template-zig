@@ -23,9 +23,6 @@ const Color = roc_types.Color;
 const roc__init_for_host = roc_types.roc__init_for_host;
 const roc__render_for_host = roc_types.roc__render_for_host;
 
-// This file is native-only - WASM uses host_web.zig
-const is_wasm = false;
-
 // Direct C interop with raylib
 const rl = @cImport({
     @cInclude("raylib.h");
@@ -35,38 +32,12 @@ const rl = @cImport({
 const TRACE_ALLOCATIONS = false;
 const TRACE_HOST = false;
 
-/// WASM console output functions (provided by JavaScript environment)
-extern "env" fn js_console_log(ptr: [*]const u8, len: usize) void;
-extern "env" fn js_console_error(ptr: [*]const u8, len: usize) void;
-
-fn wasmConsoleLog(msg: []const u8) void {
-    if (is_wasm) {
-        js_console_log(msg.ptr, msg.len);
-    }
-}
-
-fn wasmConsoleError(msg: []const u8) void {
-    if (is_wasm) {
-        js_console_error(msg.ptr, msg.len);
-    }
-}
-
 /// Global flag to track if dbg or expect_failed was called.
 /// If set, program exits with non-zero code to prevent accidental commits.
-/// Note: For WASM, we use a simple bool since it's single-threaded.
-/// For native builds, we use atomic to handle potential multi-threaded scenarios.
-var debug_or_expect_called: if (is_wasm) bool else std.atomic.Value(bool) =
-    if (is_wasm) false else std.atomic.Value(bool).init(false);
+var debug_or_expect_called: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
 
-/// Host environment - conditionally uses different allocators for WASM vs native
-const HostEnv = if (is_wasm) struct {
-    // WASM uses a simple allocator, no stdin
-    wasm_alloc: std.mem.Allocator,
-
-    pub fn allocator(self: *@This()) std.mem.Allocator {
-        return self.wasm_alloc;
-    }
-} else struct {
+/// Host environment for native builds
+const HostEnv = struct {
     gpa: std.heap.GeneralPurposeAllocator(.{}),
     stdin_reader: std.fs.File.Reader,
 
@@ -91,14 +62,9 @@ fn rocAllocFn(roc_alloc: *builtins.host_abi.RocAlloc, env: *anyopaque) callconv(
     const result = allocator.rawAlloc(total_size, align_enum, @returnAddress());
 
     const base_ptr = result orelse {
-        if (is_wasm) {
-            wasmConsoleError("Host error: allocation failed, out of memory");
-            @panic("allocation failed");
-        } else {
-            const stderr: std.fs.File = .stderr();
-            stderr.writeAll("\x1b[31mHost error:\x1b[0m allocation failed, out of memory\n") catch {};
-            std.process.exit(1);
-        }
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll("\x1b[31mHost error:\x1b[0m allocation failed, out of memory\n") catch {};
+        std.process.exit(1);
     };
 
     // Store the total size (including metadata) right before the user data
@@ -165,14 +131,9 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
 
     // Allocate new memory with proper alignment
     const new_base_ptr = allocator.rawAlloc(new_total_size, align_enum, @returnAddress()) orelse {
-        if (is_wasm) {
-            wasmConsoleError("Host error: reallocation failed, out of memory");
-            @panic("reallocation failed");
-        } else {
-            const stderr: std.fs.File = .stderr();
-            stderr.writeAll("\x1b[31mHost error:\x1b[0m reallocation failed, out of memory\n") catch {};
-            std.process.exit(1);
-        }
+        const stderr: std.fs.File = .stderr();
+        stderr.writeAll("\x1b[31mHost error:\x1b[0m reallocation failed, out of memory\n") catch {};
+        std.process.exit(1);
     };
 
     // Copy old data to new allocation (excluding metadata, just user data)
@@ -201,60 +162,36 @@ fn rocReallocFn(roc_realloc: *builtins.host_abi.RocRealloc, env: *anyopaque) cal
 /// Roc debug function
 fn rocDbgFn(roc_dbg: *const builtins.host_abi.RocDbg, env: *anyopaque) callconv(.c) void {
     _ = env;
-    if (is_wasm) {
-        debug_or_expect_called = true;
-    } else {
-        debug_or_expect_called.store(true, .release);
-    }
+    debug_or_expect_called.store(true, .release);
     const message = roc_dbg.utf8_bytes[0..roc_dbg.len];
-    if (is_wasm) {
-        wasmConsoleLog("dbg: ");
-        wasmConsoleLog(message);
-    } else {
-        const stderr: std.fs.File = .stderr();
-        stderr.writeAll("\x1b[33mdbg:\x1b[0m ") catch {};
-        stderr.writeAll(message) catch {};
-        stderr.writeAll("\n") catch {};
-    }
+    const stderr: std.fs.File = .stderr();
+    stderr.writeAll("\x1b[33mdbg:\x1b[0m ") catch {};
+    stderr.writeAll(message) catch {};
+    stderr.writeAll("\n") catch {};
 }
 
 /// Roc expect failed function
 fn rocExpectFailedFn(roc_expect: *const builtins.host_abi.RocExpectFailed, env: *anyopaque) callconv(.c) void {
     _ = env;
-    if (is_wasm) {
-        debug_or_expect_called = true;
-    } else {
-        debug_or_expect_called.store(true, .release);
-    }
+    debug_or_expect_called.store(true, .release);
     const source_bytes = roc_expect.utf8_bytes[0..roc_expect.len];
     const trimmed = std.mem.trim(u8, source_bytes, " \t\n\r");
-    if (is_wasm) {
-        wasmConsoleError("expect failed: ");
-        wasmConsoleError(trimmed);
-    } else {
-        const stderr: std.fs.File = .stderr();
-        stderr.writeAll("\x1b[33mexpect failed:\x1b[0m ") catch {};
-        stderr.writeAll(trimmed) catch {};
-        stderr.writeAll("\n") catch {};
-    }
+    const stderr: std.fs.File = .stderr();
+    stderr.writeAll("\x1b[33mexpect failed:\x1b[0m ") catch {};
+    stderr.writeAll(trimmed) catch {};
+    stderr.writeAll("\n") catch {};
 }
 
 /// Roc crashed function
 fn rocCrashedFn(roc_crashed: *const builtins.host_abi.RocCrashed, env: *anyopaque) callconv(.c) noreturn {
     _ = env;
     const message = roc_crashed.utf8_bytes[0..roc_crashed.len];
-    if (is_wasm) {
-        wasmConsoleError("Roc crashed: ");
-        wasmConsoleError(message);
-        @panic("Roc crashed");
-    } else {
-        const stderr: std.fs.File = .stderr();
-        var buf: [256]u8 = undefined;
-        var w = stderr.writer(&buf);
-        w.interface.print("\n\x1b[31mRoc crashed:\x1b[0m {s}\n", .{message}) catch {};
-        w.interface.flush() catch {};
-        std.process.exit(1);
-    }
+    const stderr: std.fs.File = .stderr();
+    var buf: [256]u8 = undefined;
+    var w = stderr.writer(&buf);
+    w.interface.print("\n\x1b[31mRoc crashed:\x1b[0m {s}\n", .{message}) catch {};
+    w.interface.flush() catch {};
+    std.process.exit(1);
 }
 
 /// Decrement the reference count of a RocBox
@@ -522,16 +459,10 @@ export fn __force_gl_exports() void {
 
 /// Platform host entrypoint
 fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
-    var host_env: HostEnv = if (is_wasm) blk: {
-        break :blk HostEnv{
-            .wasm_alloc = std.heap.wasm_allocator,
-        };
-    } else blk: {
-        var stdin_buffer: [4096]u8 = undefined;
-        break :blk HostEnv{
-            .gpa = std.heap.GeneralPurposeAllocator(.{}){},
-            .stdin_reader = std.fs.File.stdin().reader(&stdin_buffer),
-        };
+    var stdin_buffer: [4096]u8 = undefined;
+    var host_env: HostEnv = .{
+        .gpa = std.heap.GeneralPurposeAllocator(.{}){},
+        .stdin_reader = std.fs.File.stdin().reader(&stdin_buffer),
     };
 
     // Create the RocOps struct
@@ -615,12 +546,8 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
                 platform_state.mouse_y,
                 platform_state.mouse_left,
             }) catch "[HOST] print error\n";
-            if (is_wasm) {
-                wasmConsoleLog(msg);
-            } else {
-                const dbg_stderr: std.fs.File = .stderr();
-                dbg_stderr.writeAll(msg) catch {};
-            }
+            const dbg_stderr: std.fs.File = .stderr();
+            dbg_stderr.writeAll(msg) catch {};
         }
 
         // Call render with the boxed model and platform state
@@ -656,17 +583,15 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
         decrefRocBox(boxed_model, &roc_ops);
     }
 
-    // Check for memory leaks before returning (native builds only)
-    if (!is_wasm) {
-        const leak_status = host_env.gpa.deinit();
-        if (leak_status == .leak) {
-            std.log.warn("Memory leak detected", .{});
-        }
+    // Check for memory leaks before returning
+    const leak_status = host_env.gpa.deinit();
+    if (leak_status == .leak) {
+        std.log.warn("Memory leak detected", .{});
     }
 
     // If dbg or expect_failed was called, ensure non-zero exit code
     // to prevent accidental commits with debug statements or failing tests
-    const was_debug_called = if (is_wasm) debug_or_expect_called else debug_or_expect_called.load(.acquire);
+    const was_debug_called = debug_or_expect_called.load(.acquire);
     if (was_debug_called and exit_code == 0) {
         return 1;
     }

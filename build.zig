@@ -193,6 +193,20 @@ pub fn build(b: *std.Build) void {
         test_step.dependOn(&run_native_tests.step);
     }
 
+    // Zig unit tests for host_web.zig (runs natively, tests pure command buffer logic)
+    const web_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("platform/host_web.zig"),
+            .target = native_target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "builtins", .module = builtins_module },
+            },
+        }),
+    });
+    const run_web_tests = b.addRunArtifact(web_tests);
+    test_step.dependOn(&run_web_tests.step);
+
     // Build standalone test WASM module (exports test functions, no Roc app)
     const wasm_test_exe = b.addExecutable(.{
         .name = "host_web",

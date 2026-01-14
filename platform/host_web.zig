@@ -1,15 +1,9 @@
 ///! Web platform host for roc-ray - command buffer based rendering for Canvas 2D/WebGL
-///! This file is used ONLY for WASM builds. Native builds use host_native.zig with raylib.
+///! This file is used for WASM builds. Native builds use host_native.zig with raylib.
+///! Can also be compiled natively for unit testing.
 const std = @import("std");
 const builtin = @import("builtin");
 const builtins = @import("builtins");
-
-// Compile-time check: this file is WASM-only
-comptime {
-    if (builtin.cpu.arch != .wasm32) {
-        @compileError("host_web.zig is only for wasm32 target. Use host_native.zig for native builds.");
-    }
-}
 
 // Import shared Roc ABI types (same definitions as native host)
 const roc_types = @import("roc_types.zig");
@@ -31,9 +25,20 @@ const RocRealloc = roc_types.RocRealloc;
 const RocDbg = roc_types.RocDbg;
 const RocExpectFailed = roc_types.RocExpectFailed;
 const RocCrashed = roc_types.RocCrashed;
-// Roc functions (provided at link time by Roc compiler)
-const roc__init_for_host = roc_types.roc__init_for_host;
-const roc__render_for_host = roc_types.roc__render_for_host;
+// Roc functions: extern on WASM (provided by Roc compiler), stubs on native (for testing)
+const roc__init_for_host = if (builtin.cpu.arch == .wasm32)
+    roc_types.roc__init_for_host
+else
+    stubRocInit;
+
+const roc__render_for_host = if (builtin.cpu.arch == .wasm32)
+    roc_types.roc__render_for_host
+else
+    stubRocRender;
+
+// Native stubs (only used during unit testing, not in production)
+fn stubRocInit(_: *RocOps, _: *Try_BoxModel_I64, _: ?*anyopaque) callconv(.c) void {}
+fn stubRocRender(_: *RocOps, _: *Try_BoxModel_I64, _: *RenderArgs) callconv(.c) void {}
 
 // ============================================================================
 // Constants - Command buffer capacities (tune based on typical usage)
@@ -120,7 +125,11 @@ var cmd_buffer: CommandBuffer = .{};
 // Memory Management
 // ============================================================================
 
-const allocator_vtable = std.heap.wasm_allocator.vtable;
+// Conditional allocator: WASM uses wasm_allocator, native uses page_allocator (for testing)
+const allocator_vtable = if (builtin.cpu.arch == .wasm32)
+    std.heap.wasm_allocator.vtable
+else
+    std.heap.page_allocator.vtable;
 
 // RocOps callback implementations
 fn rocAllocFn(args: *RocAlloc, env: *anyopaque) callconv(.c) void {
@@ -255,9 +264,24 @@ export fn roc_realloc(ptr: [*]u8, new_size: usize, _: usize, alignment: u32) cal
     return @ptrFromInt(@intFromPtr(new_base_ptr) + size_storage_bytes);
 }
 
-// JavaScript imports (provided by host.js at runtime)
-extern fn js_console_log(ptr: [*]const u8, len: usize) void;
-extern fn js_throw_error(ptr: [*]const u8, len: usize) noreturn;
+// JavaScript imports (extern on WASM, stubs on native for testing)
+fn js_console_log(ptr: [*]const u8, len: usize) void {
+    if (builtin.cpu.arch == .wasm32) {
+        const extern_log = @extern(*const fn ([*]const u8, usize) callconv(.c) void, .{ .name = "js_console_log" });
+        extern_log(ptr, len);
+    } else {
+        std.debug.print("{s}\n", .{ptr[0..len]});
+    }
+}
+
+fn js_throw_error(ptr: [*]const u8, len: usize) noreturn {
+    if (builtin.cpu.arch == .wasm32) {
+        const extern_throw = @extern(*const fn ([*]const u8, usize) callconv(.c) noreturn, .{ .name = "js_throw_error" });
+        extern_throw(ptr, len);
+    } else {
+        std.debug.panic("Error: {s}", .{ptr[0..len]});
+    }
+}
 
 // RocOps callback implementations
 fn rocDbgFn(dbg_info: *const RocDbg, env: *anyopaque) callconv(.c) void {

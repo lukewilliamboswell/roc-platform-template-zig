@@ -37,7 +37,7 @@ fi
 BASENAME=$(basename "$ROC_FILE" .roc)
 
 echo "=== Building host library ==="
-zig build native
+zig build
 
 echo "=== Building Roc app for WASM ==="
 roc build --target=wasm32 "$ROC_FILE"
