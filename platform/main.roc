@@ -18,7 +18,7 @@ platform ""
 			arm64mac: ["libhost.a", "libraylib.a", app],
 			## libm.so must come after libraylib.a (which uses it) or --as-needed drops it
 			x64glibc: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", app, "libc.so", "crtn.o"],
-			arm64glibc: ["Scrt1.o", "crti.o", "libhost.a", "libraylib.a", "libm.so", app, "libc.so", "crtn.o"],
+			## arm64glibc not supported - raylib doesn't provide pre-built libraries for Linux ARM
 		}
 		static_lib: {
 			wasm32: ["libhost.a", app],
