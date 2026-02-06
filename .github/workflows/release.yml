@@ -34,7 +34,7 @@ jobs:
           version: 0.15.2
           use-cache: false
 
-      - name: Build Roc from pinned commit
+      - name: Clone Roc source
         run: |
           if [ ! -d "roc-src" ]; then
             echo "Building roc from pinned commit..."
@@ -45,15 +45,16 @@ jobs:
             git remote add origin https://github.com/roc-lang/roc
             git fetch --depth 1 origin "$ROC_COMMIT"
             git checkout --detach "$ROC_COMMIT"
-
-            zig build roc
-
-            echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
-            cd ..
-          else
-            echo "roc-src already exists, adding to PATH"
-            echo "$(pwd)/roc-src/zig-out/bin" >> "$GITHUB_PATH"
           fi
+
+      - name: Build Roc
+        uses: roc-lang/roc/.github/actions/flaky-retry@main
+        with:
+          command: cd roc-src && zig build roc
+          error_string_contains: "build.zig.zon"
+
+      - name: Add roc to PATH
+        run: echo "$(pwd)/roc-src/zig-out/bin" >> "$GITHUB_PATH"
 
       - name: Build platform with ReleaseSafe
         run: zig build -Doptimize=ReleaseSafe
@@ -115,7 +116,7 @@ jobs:
           version: 0.15.2
           use-cache: false
 
-      - name: Build Roc from pinned commit
+      - name: Clone Roc source
         run: |
           if [ ! -d "roc-src" ]; then
             echo "Building roc from pinned commit..."
@@ -126,15 +127,16 @@ jobs:
             git remote add origin https://github.com/roc-lang/roc
             git fetch --depth 1 origin "$ROC_COMMIT"
             git checkout --detach "$ROC_COMMIT"
-
-            zig build roc
-
-            echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
-            cd ..
-          else
-            echo "roc-src already exists, adding to PATH"
-            echo "$(pwd)/roc-src/zig-out/bin" >> "$GITHUB_PATH"
           fi
+
+      - name: Build Roc
+        uses: roc-lang/roc/.github/actions/flaky-retry@3d0fdde9ae6ffb5ef411f8c8c2fc2cdce22a74fe
+        with:
+          command: cd roc-src && zig build roc
+          error_string_contains: "build.zig.zon"
+
+      - name: Add roc to PATH
+        run: echo "$(pwd)/roc-src/zig-out/bin" >> "$GITHUB_PATH"
 
       - name: Download bundle artifact
         uses: actions/download-artifact@v4
