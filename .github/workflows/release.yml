@@ -34,23 +34,23 @@ jobs:
           version: 0.15.2
           use-cache: false
 
-      - name: Build Roc from pinned commit
+      - name: Clone Roc source
+        run: |
+          if [ ! -d "roc-src" ]; then
+            echo "Building roc from pinned commit..."
+            ROC_COMMIT=$(python3 ci/get_roc_commit.py)
+
+            git init roc-src
+            cd roc-src
+            git remote add origin https://github.com/roc-lang/roc
+            git fetch --depth 1 origin "$ROC_COMMIT"
+            git checkout --detach "$ROC_COMMIT"
+          fi
+
+      - name: Build Roc
         uses: roc-lang/roc/.github/actions/flaky-retry@main
         with:
-          command: |
-            if [ ! -d "roc-src" ]; then
-              echo "Building roc from pinned commit..."
-              ROC_COMMIT=$(python3 ci/get_roc_commit.py)
-
-              git init roc-src
-              cd roc-src
-              git remote add origin https://github.com/roc-lang/roc
-              git fetch --depth 1 origin "$ROC_COMMIT"
-              git checkout --detach "$ROC_COMMIT"
-
-              zig build roc
-              cd ..
-            fi
+          command: cd roc-src && zig build roc
           error_string_contains: "build.zig.zon"
 
       - name: Add roc to PATH
@@ -116,23 +116,23 @@ jobs:
           version: 0.15.2
           use-cache: false
 
-      - name: Build Roc from pinned commit
+      - name: Clone Roc source
+        run: |
+          if [ ! -d "roc-src" ]; then
+            echo "Building roc from pinned commit..."
+            ROC_COMMIT=$(python3 ci/get_roc_commit.py)
+
+            git init roc-src
+            cd roc-src
+            git remote add origin https://github.com/roc-lang/roc
+            git fetch --depth 1 origin "$ROC_COMMIT"
+            git checkout --detach "$ROC_COMMIT"
+          fi
+
+      - name: Build Roc
         uses: roc-lang/roc/.github/actions/flaky-retry@3d0fdde9ae6ffb5ef411f8c8c2fc2cdce22a74fe
         with:
-          command: |
-            if [ ! -d "roc-src" ]; then
-              echo "Building roc from pinned commit..."
-              ROC_COMMIT=$(python3 ci/get_roc_commit.py)
-
-              git init roc-src
-              cd roc-src
-              git remote add origin https://github.com/roc-lang/roc
-              git fetch --depth 1 origin "$ROC_COMMIT"
-              git checkout --detach "$ROC_COMMIT"
-
-              zig build roc
-              cd ..
-            fi
+          command: cd roc-src && zig build roc
           error_string_contains: "build.zig.zon"
 
       - name: Add roc to PATH
