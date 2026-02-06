@@ -35,25 +35,28 @@ jobs:
           use-cache: false
 
       - name: Build Roc from pinned commit
-        run: |
-          if [ ! -d "roc-src" ]; then
-            echo "Building roc from pinned commit..."
-            ROC_COMMIT=$(python3 ci/get_roc_commit.py)
+        uses: roc-lang/roc/.github/actions/flaky-retry@main
+        with:
+          command: |
+            if [ ! -d "roc-src" ]; then
+              echo "Building roc from pinned commit..."
+              ROC_COMMIT=$(python3 ci/get_roc_commit.py)
 
-            git init roc-src
-            cd roc-src
-            git remote add origin https://github.com/roc-lang/roc
-            git fetch --depth 1 origin "$ROC_COMMIT"
-            git checkout --detach "$ROC_COMMIT"
+              git init roc-src
+              cd roc-src
+              git remote add origin https://github.com/roc-lang/roc
+              git fetch --depth 1 origin "$ROC_COMMIT"
+              git checkout --detach "$ROC_COMMIT"
 
-            zig build roc
+              zig build roc
 
-            echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
-            cd ..
-          else
-            echo "roc-src already exists, adding to PATH"
-            echo "$(pwd)/roc-src/zig-out/bin" >> "$GITHUB_PATH"
-          fi
+              echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
+              cd ..
+            else
+              echo "roc-src already exists, adding to PATH"
+              echo "$(pwd)/roc-src/zig-out/bin" >> "$GITHUB_PATH"
+            fi
+          error_string_contains: "build.zig.zon"
 
       - name: Build platform with ReleaseSafe
         run: zig build -Doptimize=ReleaseSafe
@@ -116,25 +119,28 @@ jobs:
           use-cache: false
 
       - name: Build Roc from pinned commit
-        run: |
-          if [ ! -d "roc-src" ]; then
-            echo "Building roc from pinned commit..."
-            ROC_COMMIT=$(python3 ci/get_roc_commit.py)
+        uses: roc-lang/roc/.github/actions/flaky-retry@3d0fdde9ae6ffb5ef411f8c8c2fc2cdce22a74fe
+        with:
+          command: |
+            if [ ! -d "roc-src" ]; then
+              echo "Building roc from pinned commit..."
+              ROC_COMMIT=$(python3 ci/get_roc_commit.py)
 
-            git init roc-src
-            cd roc-src
-            git remote add origin https://github.com/roc-lang/roc
-            git fetch --depth 1 origin "$ROC_COMMIT"
-            git checkout --detach "$ROC_COMMIT"
+              git init roc-src
+              cd roc-src
+              git remote add origin https://github.com/roc-lang/roc
+              git fetch --depth 1 origin "$ROC_COMMIT"
+              git checkout --detach "$ROC_COMMIT"
 
-            zig build roc
+              zig build roc
 
-            echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
-            cd ..
-          else
-            echo "roc-src already exists, adding to PATH"
-            echo "$(pwd)/roc-src/zig-out/bin" >> "$GITHUB_PATH"
-          fi
+              echo "$(pwd)/zig-out/bin" >> "$GITHUB_PATH"
+              cd ..
+            else
+              echo "roc-src already exists, adding to PATH"
+              echo "$(pwd)/roc-src/zig-out/bin" >> "$GITHUB_PATH"
+            fi
+          error_string_contains: "build.zig.zon"
 
       - name: Download bundle artifact
         uses: actions/download-artifact@v4

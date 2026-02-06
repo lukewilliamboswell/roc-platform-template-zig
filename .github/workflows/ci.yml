@@ -33,4 +33,7 @@ jobs:
           use-cache: false
 
       - name: Run all tests
-        run: bash ci/all_tests.sh
+        uses: roc-lang/roc/.github/actions/flaky-retry@3d0fdde9ae6ffb5ef411f8c8c2fc2cdce22a74fe
+        with:
+          command: bash ci/all_tests.sh
+          error_string_contains: "build.zig.zon"
