@@ -167,8 +167,7 @@ pub const RocStr = extern struct {
     }
 
     /// Increment the reference count by `amount`.
-    pub fn incref(self: Self, amount: isize, roc_ops: *RocOps) void {
-        _ = roc_ops;
+    pub fn incref(self: Self, amount: isize) void {
         if (self.isSmallStr()) return;
         const alloc_ptr = self.getAllocationPtr() orelse return;
         const rc: *isize = @ptrFromInt(@intFromPtr(alloc_ptr) - @sizeOf(isize));
@@ -285,8 +284,7 @@ pub fn RocListWith(comptime T: type, comptime elements_refcounted: bool) type {
         }
 
         /// Increment the reference count by `amount`.
-        pub fn incref(self: Self, amount: isize, roc_ops: *RocOps) void {
-            _ = roc_ops;
+        pub fn incref(self: Self, amount: isize) void {
             const ptr = self.elements_ptr orelse return;
             const rc: *isize = @ptrFromInt(@intFromPtr(ptr) - @sizeOf(isize));
             _ = @atomicRmw(isize, rc, .Add, amount, .monotonic);
