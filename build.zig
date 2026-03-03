@@ -56,10 +56,6 @@ const all_targets = [_]RocTarget{
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
-    // Get the roc dependency and its builtins module
-    const roc_dep = b.dependency("roc", .{});
-    const builtins_module = roc_dep.module("builtins");
-
     // Cleanup step: remove only generated host library files (preserve libc.a, crt1.o, etc.)
     const cleanup_step = b.step("clean", "Remove all built library files");
     for (all_targets) |roc_target| {
@@ -81,7 +77,7 @@ pub fn build(b: *std.Build) void {
     // Build for each Roc target
     for (all_targets) |roc_target| {
         const target = b.resolveTargetQuery(roc_target.toZigTarget());
-        const host_lib = buildHostLib(b, target, optimize, builtins_module);
+        const host_lib = buildHostLib(b, target, optimize);
 
         // Copy to platform/targets/{target}/libhost.a (or host.lib for Windows)
         copy_all.addCopyFileToSource(
@@ -102,7 +98,7 @@ pub fn build(b: *std.Build) void {
         return;
     };
 
-    const native_lib = buildHostLib(b, native_target, optimize, builtins_module);
+    const native_lib = buildHostLib(b, native_target, optimize);
     b.installArtifact(native_lib);
 
     const copy_native = b.addUpdateSourceFiles();
@@ -119,12 +115,9 @@ pub fn build(b: *std.Build) void {
     // Unit tests for platform code
     const host_tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("platform/host.zig"),
+            .root_source_file = b.path("src/host.zig"),
             .target = native_target,
             .optimize = optimize,
-            .imports = &.{
-                .{ .name = "builtins", .module = builtins_module },
-            },
         }),
     });
 
@@ -209,20 +202,16 @@ fn buildHostLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    builtins_module: *std.Build.Module,
 ) *std.Build.Step.Compile {
     const host_lib = b.addLibrary(.{
         .name = "host",
         .linkage = .static,
         .root_module = b.createModule(.{
-            .root_source_file = b.path("platform/host.zig"),
+            .root_source_file = b.path("src/host.zig"),
             .target = target,
             .optimize = optimize,
             .strip = optimize != .Debug,
             .pic = true,
-            .imports = &.{
-                .{ .name = "builtins", .module = builtins_module },
-            },
         }),
     });
     // Force bundle compiler-rt to resolve runtime symbols like __main

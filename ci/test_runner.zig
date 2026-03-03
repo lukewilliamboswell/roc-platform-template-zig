@@ -377,11 +377,11 @@ fn runDbgTestRun(allocator: Allocator, example: []const u8) !TestResult {
     defer allocator.free(result.stderr);
     defer allocator.free(result.stdout);
 
-    // Should exit non-zero and contain "dbg:" in output
-    if (result.exit_code != 0 and std.mem.indexOf(u8, result.stderr, "dbg:") != null) {
+    // Should contain "[ROC DBG]" in stderr output
+    if (std.mem.indexOf(u8, result.stderr, "[ROC DBG]") != null) {
         return .{ .success = true };
     }
-    return .{ .success = false, .message = "expected non-zero exit and 'dbg:' in stderr" };
+    return .{ .success = false, .message = "expected '[ROC DBG]' in stderr" };
 }
 
 fn runDbgTestBuild(allocator: Allocator, example: []const u8) !TestResult {
@@ -413,11 +413,11 @@ fn runDbgTestBuild(allocator: Allocator, example: []const u8) !TestResult {
     defer allocator.free(run_result.stderr);
     defer allocator.free(run_result.stdout);
 
-    // Should exit non-zero and contain "dbg:" in output
-    if (run_result.exit_code != 0 and std.mem.indexOf(u8, run_result.stderr, "dbg:") != null) {
+    // Should contain "[ROC DBG]" in stderr output
+    if (std.mem.indexOf(u8, run_result.stderr, "[ROC DBG]") != null) {
         return .{ .success = true };
     }
-    return .{ .success = false, .message = "expected non-zero exit and 'dbg:' in stderr" };
+    return .{ .success = false, .message = "expected '[ROC DBG]' in stderr" };
 }
 
 const CommandResult = struct {
