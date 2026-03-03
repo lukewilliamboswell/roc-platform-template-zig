@@ -202,6 +202,7 @@ pub fn RocList(comptime T: type) type {
     return RocListWith(T, true);
 }
 
+/// Parameterized list constructor; use `RocList(T)` for refcounted elements.
 pub fn RocListWith(comptime T: type, comptime elements_refcounted: bool) type {
     return extern struct {
         elements_ptr: ?[*]T,
