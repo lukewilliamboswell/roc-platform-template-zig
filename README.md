@@ -23,6 +23,16 @@ zig build -Doptimize=ReleaseSafe
 zig build native -Doptimize=ReleaseSafe
 ```
 
+## Regenerating Glue
+
+When the platform API changes (e.g. adding or modifying hosted functions in `platform/main.roc`), regenerate the Zig glue:
+
+```bash
+roc experimental-glue <path-to-roc>/src/glue/src/ZigGlue.roc ./src/ ./platform/main.roc
+```
+
+This updates `src/roc_platform_abi.zig` with the ABI types and dispatch table matching the platform's hosted functions.
+
 ## Bundling
 
 ```bash
