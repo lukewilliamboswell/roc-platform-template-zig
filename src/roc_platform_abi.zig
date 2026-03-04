@@ -301,24 +301,36 @@ pub fn RocListWith(comptime T: type, comptime elements_refcounted: bool) type {
     };
 }
 
-/// Total number of hosted functions in this platform.
-pub const hosted_function_count: u32 = 3;
+/// Tag discriminant for Try.
+pub const TryTag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
 
-/// Dispatch index for Stderr.line!.
-pub const hosted_idx_stderr_line: u32 = 0;
-/// Dispatch index for Stdin.line!.
-pub const hosted_idx_stdin_line: u32 = 1;
-/// Dispatch index for Stdout.line!.
-pub const hosted_idx_stdout_line: u32 = 2;
+/// Tag union: Try
+pub const Try = extern struct {
+    payload: extern union {
+        err: i32,
+        ok: void,
+    },
+    tag: TryTag,
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(Try) != 8) @compileError("Try size mismatch");
+        if (@alignOf(Try) != 4) @compileError("Try alignment mismatch");
+    }
+}
 
 /// Arguments for Stderr.line!
-/// Roc signature: Str => {  }
+/// Roc signature: Str => {}
 pub const StderrLineArgs = extern struct {
     arg0: RocStr,
 };
 
 /// Arguments for Stdout.line!
-/// Roc signature: Str => {  }
+/// Roc signature: Str => {}
 pub const StdoutLineArgs = extern struct {
     arg0: RocStr,
 };
@@ -498,3 +510,14 @@ pub fn makeRocOps(comptime EnvType: type, env: *EnvType, hosted_fns: HostedFunct
         .hosted_fns = hosted_fns,
     };
 }
+
+// =============================================================================
+// Entrypoint Declarations
+//
+// Extern declarations for Roc entrypoints. Call these from your platform host
+// to invoke Roc application functions.
+// =============================================================================
+
+/// Entrypoint: main_for_host!
+pub extern fn roc__main_for_host(ops: *RocOps, ret_ptr: *i32, arg_ptr: ?*const RocList(RocStr)) callconv(.c) void;
+

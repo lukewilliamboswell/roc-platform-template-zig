@@ -12,10 +12,6 @@ const HostEnv = struct {
     }
 };
 
-// External symbols provided by the Roc runtime object file
-// Follows RocCall ABI: ops, ret_ptr, then argument pointers
-extern fn roc__main_for_host(ops: *abi.RocOps, ret_ptr: *anyopaque, arg_ptr: ?*anyopaque) callconv(.c) void;
-
 // OS-specific entry point handling (not exported during tests)
 comptime {
     if (!@import("builtin").is_test) {
@@ -118,7 +114,7 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     std.log.debug("[HOST] Calling roc__main_for_host...", .{});
 
     var exit_code: i32 = -99;
-    roc__main_for_host(&roc_ops, @as(*anyopaque, @ptrCast(&exit_code)), @as(*anyopaque, @ptrCast(@constCast(&args_list))));
+    abi.roc__main_for_host(&roc_ops, &exit_code, &args_list);
 
     std.log.debug("[HOST] Returned from roc, exit_code={d}", .{exit_code});
 
