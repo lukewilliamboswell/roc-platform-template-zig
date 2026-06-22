@@ -105,15 +105,21 @@ import sys
 
 bundle_url, out_dir = sys.argv[1], Path(sys.argv[2])
 source_dir = Path("examples")
-needle = 'platform "../platform/main.roc"'
 replacement = f'platform "{bundle_url}"'
+needles = [
+    'platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst"',
+    'platform "../platform/main.roc"',
+]
 
 rewritten = 0
 for source in sorted(source_dir.glob("*.roc")):
     text = source.read_text(encoding="utf-8")
-    if needle not in text:
-        raise SystemExit(f"example does not use the local platform path: {source}")
-    (out_dir / source.name).write_text(text.replace(needle, replacement), encoding="utf-8")
+    for needle in needles:
+        if needle in text:
+            (out_dir / source.name).write_text(text.replace(needle, replacement), encoding="utf-8")
+            break
+    else:
+        raise SystemExit(f"example does not use a recognized platform URL: {source}")
     rewritten += 1
 
 if rewritten == 0:

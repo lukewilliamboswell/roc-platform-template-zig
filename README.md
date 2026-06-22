@@ -9,6 +9,12 @@ A template for building [Roc platforms](https://www.roc-lang.org/platforms) usin
 
 ## Examples
 
+Use the current release bundle as the platform dependency:
+
+```roc
+app [main!] { pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst" }
+```
+
 Run examples with interpreter: `roc examples/<name>.roc`
 
 Build standalone executable: `roc build examples/<name>.roc`
@@ -17,7 +23,7 @@ Build standalone executable: `roc build examples/<name>.roc`
 
 ```
 $ zig build test
-roc Roc compiler version debug-05d70690
+roc Roc compiler version debug-ad55d522
 
   check: 12/12 passed
   run (interpreter): 10/10 passed
