@@ -425,7 +425,7 @@ fn runDbgTestBuild(allocator: Allocator, io: std.Io, example: []const u8) !TestR
     const output_arg = try std.fmt.allocPrint(allocator, "--output={s}", .{full_exe_path});
     defer allocator.free(output_arg);
 
-    const build_result = try runCommand(allocator, io, &.{ "roc", "build", path, output_arg }, null);
+    const build_result = try runCommand(allocator, io, &.{ "roc", "build", "--opt=dev", path, output_arg }, null);
     defer allocator.free(build_result.stderr);
     defer allocator.free(build_result.stdout);
 
