@@ -23,7 +23,7 @@ Build standalone executable: `roc build examples/<name>.roc`
 
 ```
 $ zig build test
-roc Roc compiler version debug-ad55d522
+roc Roc compiler version ...
 
   check: 12/12 passed
   run (interpreter): 10/10 passed
