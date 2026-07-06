@@ -1,3 +1,8 @@
+[![Roc-Lang][roc_badge]][roc_link]
+
+[roc_badge]: https://img.shields.io/endpoint?url=https%3A%2F%2Fpastebin.com%2Fraw%2FcFzuCCd7
+[roc_link]: https://github.com/roc-lang/roc
+
 # Roc platform template for Zig
 
 A template for building [Roc platforms](https://www.roc-lang.org/platforms) using [Zig](https://ziglang.org).
@@ -9,15 +14,27 @@ A template for building [Roc platforms](https://www.roc-lang.org/platforms) usin
 
 ## Examples
 
-Use the current release bundle as the platform dependency:
+The examples in this repo use the local platform at `../platform/main.roc`.
 
-```roc
-app [main!] { pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst" }
+For apps outside this repo, build a bundle from this checkout and use that generated bundle URL or file path as the platform dependency. The latest published release bundle may not match the current platform API.
+
+```bash
+./bundle.sh
 ```
 
 Run examples with interpreter: `roc examples/<name>.roc`
 
 Build standalone executable: `roc build examples/<name>.roc`
+
+## Documentation
+
+Platform API docs are published at <https://lukewilliamboswell.github.io/roc-platform-template-zig/>.
+
+Generate docs locally:
+
+```bash
+zig build docs
+```
 
 ## Testing
 

@@ -109,8 +109,20 @@ pub fn build(b: *std.Build) void {
     native_step.dependOn(&copy_native.step);
     native_step.dependOn(&native_lib.step);
 
+    // Docs step: verify Roc docs generation for the platform API.
+    const docs_step = b.step("docs", "Generate Roc platform API docs");
+    const docs = b.addSystemCommand(&.{
+        "roc",
+        "docs",
+        "platform/main.roc",
+        "--output=.zig-cache/roc-docs",
+        "--no-cache",
+    });
+    docs_step.dependOn(&docs.step);
+
     // Test step: run unit tests and integration tests
     const test_step = b.step("test", "Run all tests (unit tests and integration tests)");
+    test_step.dependOn(&docs.step);
 
     // Unit tests for platform code
     const host_tests = b.addTest(.{

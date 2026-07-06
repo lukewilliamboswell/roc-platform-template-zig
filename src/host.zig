@@ -44,8 +44,48 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
     return platform_main(@intCast(argc), argv);
 }
 
-/// Hosted function: Stderr.line!
-fn hostedStderrLine(str: abi.RocStr) callconv(.c) void {
+fn stderrLineOk() abi.TryType0 {
+    var result = std.mem.zeroes(abi.TryType0);
+    result.tag = .Ok;
+    return result;
+}
+
+fn stderrLineErr(err: anyerror, roc_host: *abi.RocHost) abi.TryType0 {
+    var result = std.mem.zeroes(abi.TryType0);
+    result.payload = .{ .err = abi.RocStr.fromSlice(@errorName(err), roc_host) };
+    result.tag = .Err;
+    return result;
+}
+
+fn stdinLineOk(line: abi.RocStr) abi.TryType4 {
+    var result = std.mem.zeroes(abi.TryType4);
+    result.payload = .{ .ok = line };
+    result.tag = .Ok;
+    return result;
+}
+
+fn stdinLineErr(err: anyerror, roc_host: *abi.RocHost) abi.TryType4 {
+    var result = std.mem.zeroes(abi.TryType4);
+    result.payload = .{ .err = abi.RocStr.fromSlice(@errorName(err), roc_host) };
+    result.tag = .Err;
+    return result;
+}
+
+fn stdoutLineOk() abi.TryType6 {
+    var result = std.mem.zeroes(abi.TryType6);
+    result.tag = .Ok;
+    return result;
+}
+
+fn stdoutLineErr(err: anyerror, roc_host: *abi.RocHost) abi.TryType6 {
+    var result = std.mem.zeroes(abi.TryType6);
+    result.payload = .{ .err = abi.RocStr.fromSlice(@errorName(err), roc_host) };
+    result.tag = .Err;
+    return result;
+}
+
+/// Hosted function: Host.stderr_line!
+fn hostedStderrLine(str: abi.RocStr) callconv(.c) abi.TryType0 {
     const roc_host = g_roc_host.?;
     var owned = str;
     defer owned.decref(roc_host);
@@ -53,12 +93,13 @@ fn hostedStderrLine(str: abi.RocStr) callconv(.c) void {
     const message = owned.asSlice();
     const io = std.Io.Threaded.global_single_threaded.io();
     const stderr = std.Io.File.stderr();
-    stderr.writeStreamingAll(io, message) catch {};
-    stderr.writeStreamingAll(io, "\n") catch {};
+    stderr.writeStreamingAll(io, message) catch |err| return stderrLineErr(err, roc_host);
+    stderr.writeStreamingAll(io, "\n") catch |err| return stderrLineErr(err, roc_host);
+    return stderrLineOk();
 }
 
-/// Hosted function: Stdin.line!
-fn hostedStdinLine() callconv(.c) abi.RocStr {
+/// Hosted function: Host.stdin_line!
+fn hostedStdinLine() callconv(.c) abi.TryType4 {
     const roc_host = g_roc_host.?;
     const roc_env: *abi.RocEnv = @ptrCast(@alignCast(roc_host.env));
     const host: *HostEnv = @fieldParentPtr("roc_env", roc_env);
@@ -66,11 +107,12 @@ fn hostedStdinLine() callconv(.c) abi.RocStr {
 
     var line = while (true) {
         const maybe_line = reader.takeDelimiter('\n') catch |err| switch (err) {
-            error.ReadFailed => break &.{}, // Return empty string on error
+            error.ReadFailed => return stdinLineErr(err, roc_host),
             error.StreamTooLong => {
                 // Skip the overlong line so the next call starts fresh.
                 _ = reader.discardDelimiterInclusive('\n') catch |discard_err| switch (discard_err) {
-                    error.ReadFailed, error.EndOfStream => break &.{},
+                    error.ReadFailed => return stdinLineErr(discard_err, roc_host),
+                    error.EndOfStream => return stdinLineOk(abi.RocStr.empty()),
                 };
                 continue;
             },
@@ -85,14 +127,14 @@ fn hostedStdinLine() callconv(.c) abi.RocStr {
     }
 
     if (line.len == 0) {
-        return abi.RocStr.empty();
+        return stdinLineOk(abi.RocStr.empty());
     }
 
-    return abi.RocStr.fromSlice(line[0..line.len], roc_host);
+    return stdinLineOk(abi.RocStr.fromSlice(line[0..line.len], roc_host));
 }
 
-/// Hosted function: Stdout.line!
-fn hostedStdoutLine(str: abi.RocStr) callconv(.c) void {
+/// Hosted function: Host.stdout_line!
+fn hostedStdoutLine(str: abi.RocStr) callconv(.c) abi.TryType6 {
     const roc_host = g_roc_host.?;
     var owned = str;
     defer owned.decref(roc_host);
@@ -100,8 +142,9 @@ fn hostedStdoutLine(str: abi.RocStr) callconv(.c) void {
     const message = owned.asSlice();
     const io = std.Io.Threaded.global_single_threaded.io();
     const stdout = std.Io.File.stdout();
-    stdout.writeStreamingAll(io, message) catch {};
-    stdout.writeStreamingAll(io, "\n") catch {};
+    stdout.writeStreamingAll(io, message) catch |err| return stdoutLineErr(err, roc_host);
+    stdout.writeStreamingAll(io, "\n") catch |err| return stdoutLineErr(err, roc_host);
+    return stdoutLineOk();
 }
 
 fn hostAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
