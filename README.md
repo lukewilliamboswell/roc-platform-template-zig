@@ -14,12 +14,10 @@ A template for building [Roc platforms](https://www.roc-lang.org/platforms) usin
 
 ## Examples
 
-The examples in this repo use the local platform at `../platform/main.roc`.
+Use the current release bundle as the platform dependency:
 
-For apps outside this repo, build a bundle from this checkout and use that generated bundle URL or file path as the platform dependency. The latest published release bundle may not match the current platform API.
-
-```bash
-./bundle.sh
+```roc
+app [main!] { pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst" }
 ```
 
 Run examples with interpreter: `roc examples/<name>.roc`
@@ -37,6 +35,8 @@ zig build docs
 ```
 
 ## Testing
+
+The checked-in examples use the latest release bundle so they can be copied directly. `zig build test` rewrites temporary copies to use the local `platform/main.roc` before running them.
 
 ```
 $ zig build test

@@ -107,6 +107,7 @@ bundle_url, out_dir = sys.argv[1], Path(sys.argv[2])
 source_dir = Path("examples")
 replacement = f'platform "{bundle_url}"'
 needles = [
+    'platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst"',
     'platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst"',
     'platform "../platform/main.roc"',
 ]
