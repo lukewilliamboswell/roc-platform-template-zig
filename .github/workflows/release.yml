@@ -112,6 +112,33 @@ jobs:
       - name: Run tests with bundled platform
         run: ci/test_bundled_examples.sh "${{ needs.build-and-bundle.outputs.bundle_filename }}"
 
+  build-docs:
+    name: Build Platform Docs
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Roc nightly
+        uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+        with:
+          version: nightly-new-compiler
+
+      - name: Generate docs
+        run: |
+          roc docs platform/main.roc --output=generated-docs --no-cache
+          touch generated-docs/.nojekyll
+
+      - name: Upload docs artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: generated-docs
+
   create-release:
     name: Create GitHub Release
     needs: [build-and-bundle, test-bundle]
@@ -150,3 +177,20 @@ jobs:
 
           echo "Release created: ${{ github.event.inputs.release_tag }}"
           echo "Bundle uploaded: $BUNDLE_FILE"
+
+  deploy-docs:
+    name: Deploy Docs to GitHub Pages
+    needs: [build-docs, create-release]
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy docs
+        id: deployment
+        uses: actions/deploy-pages@v4

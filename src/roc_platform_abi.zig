@@ -117,7 +117,7 @@ pub fn allocateBox(
 
 /// Decrement a pointer-aligned boxed payload with no Roc refcounted values.
 pub fn decrefBox(data_ptr: ?*anyopaque, roc_host: *RocHost) void {
-    decrefBoxWith(data_ptr, @alignOf(usize), null, roc_host);
+    decrefBoxWith(data_ptr, @alignOf(usize), false, null, roc_host);
 }
 
 /// Increment a boxed function closure.
@@ -129,7 +129,7 @@ pub fn increfErasedCallable(callable: RocErasedCallable, amount: isize) void {
 /// Decrement a boxed function closure and run its capture drop callback on final release.
 pub fn decrefErasedCallable(callable: RocErasedCallable, roc_host: *RocHost) void {
     const data = callable orelse return;
-    decrefBoxWith(@ptrCast(data), roc_erased_callable_payload_alignment, &dropErasedCallablePayload, roc_host);
+    decrefBoxWith(@ptrCast(data), roc_erased_callable_payload_alignment, false, &dropErasedCallablePayload, roc_host);
 }
 
 fn dropErasedCallablePayload(data_ptr: ?*anyopaque, roc_host: *RocHost) callconv(.c) void {
@@ -142,9 +142,16 @@ fn dropErasedCallablePayload(data_ptr: ?*anyopaque, roc_host: *RocHost) callconv
 }
 
 /// Decrement a boxed payload and run payload teardown when this is the final ref.
+///
+/// `payload_contains_refcounted` must match the value passed to `allocateBox`:
+/// it determines the box header size, and is independent of whether a
+/// `payload_decref` teardown callback is supplied. A host resource handle such
+/// as `Box(U64)` holding a raw pointer has `payload_contains_refcounted = false`
+/// even when it provides a teardown callback to free the underlying resource.
 pub fn decrefBoxWith(
     data_ptr: ?*anyopaque,
     payload_alignment: usize,
+    payload_contains_refcounted: bool,
     payload_decref: ?RocBoxPayloadDecref,
     roc_host: *RocHost,
 ) void {
@@ -155,20 +162,23 @@ pub fn decrefBoxWith(
     const prev = @atomicRmw(isize, rc, .Sub, 1, .monotonic);
     if (prev == 1) {
         if (payload_decref) |callback| callback(data_ptr, roc_host);
-        freeBoxAllocation(data, payload_alignment, payload_decref != null, roc_host);
+        freeBoxAllocation(data, payload_alignment, payload_contains_refcounted, roc_host);
     }
 }
 
 /// Free a boxed payload allocation immediately after running payload teardown.
+///
+/// See `decrefBoxWith` for the meaning of `payload_contains_refcounted`.
 pub fn freeBoxWith(
     data_ptr: ?*anyopaque,
     payload_alignment: usize,
+    payload_contains_refcounted: bool,
     payload_decref: ?RocBoxPayloadDecref,
     roc_host: *RocHost,
 ) void {
     const data = boxDataPtr(data_ptr) orelse return;
     if (payload_decref) |callback| callback(data_ptr, roc_host);
-    freeBoxAllocation(data, payload_alignment, payload_decref != null, roc_host);
+    freeBoxAllocation(data, payload_alignment, payload_contains_refcounted, roc_host);
 }
 
 /// Return true when a boxed payload data pointer has exactly one live ref.
@@ -555,38 +565,187 @@ pub const RocEnv = struct {
 };
 
 /// Tag discriminant for Try.
-pub const TryTag = enum(u8) {
+pub const TryType0Tag = enum(u8) {
     Err = 0,
     Ok = 1,
 };
 
-/// Tag union: Try
-pub const Try = extern struct {
-    payload: extern union {
-        err: i32,
+/// Payload union for Try.
+pub const TryType0Payload = extern union {
+        err: RocStr,
         ok: void,
-    },
-    tag: TryTag,
+};
+
+/// Tag union: Try
+pub const TryType0 = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: TryType0Tag,
+    pub fn payload_err(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+} else extern struct {
+    payload: TryType0Payload,
+    tag: TryType0Tag,
+    pub fn payload_err(self: *const @This()) RocStr {
+        return self.payload.err;
+    }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(Try) != 8) @compileError("Try size mismatch");
-        if (@alignOf(Try) != 4) @compileError("Try alignment mismatch");
+        if (@sizeOf(TryType0) != 32) @compileError("TryType0 size mismatch");
+        if (@alignOf(TryType0) != 8) @compileError("TryType0 alignment mismatch");
+        if (@offsetOf(TryType0, "tag") != 24) @compileError("TryType0 tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(TryType0) != 16) @compileError("TryType0 size mismatch");
+        if (@alignOf(TryType0) != 4) @compileError("TryType0 alignment mismatch");
+        if (@offsetOf(TryType0, "tag") != 12) @compileError("TryType0 tag offset mismatch");
     }
 }
 
-/// Arguments for Stderr.line!
-/// Roc signature: Str => {}
+/// Tag discriminant for Try.
+pub const TryType4Tag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const TryType4Payload = extern union {
+        err: RocStr,
+        ok: RocStr,
+};
+
+/// Tag union: Try
+pub const TryType4 = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: TryType4Tag,
+    pub fn payload_err(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+    pub fn payload_ok(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+} else extern struct {
+    payload: TryType4Payload,
+    tag: TryType4Tag,
+    pub fn payload_err(self: *const @This()) RocStr {
+        return self.payload.err;
+    }
+    pub fn payload_ok(self: *const @This()) RocStr {
+        return self.payload.ok;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(TryType4) != 32) @compileError("TryType4 size mismatch");
+        if (@alignOf(TryType4) != 8) @compileError("TryType4 alignment mismatch");
+        if (@offsetOf(TryType4, "tag") != 24) @compileError("TryType4 tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(TryType4) != 16) @compileError("TryType4 size mismatch");
+        if (@alignOf(TryType4) != 4) @compileError("TryType4 alignment mismatch");
+        if (@offsetOf(TryType4, "tag") != 12) @compileError("TryType4 tag offset mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
+pub const TryType6Tag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const TryType6Payload = extern union {
+        err: RocStr,
+        ok: void,
+};
+
+/// Tag union: Try
+pub const TryType6 = if (@sizeOf(usize) == 4) extern struct {
+    payload: [12]u8 align(4),
+    tag: TryType6Tag,
+    pub fn payload_err(self: *const @This()) RocStr {
+        const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+} else extern struct {
+    payload: TryType6Payload,
+    tag: TryType6Tag,
+    pub fn payload_err(self: *const @This()) RocStr {
+        return self.payload.err;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(TryType6) != 32) @compileError("TryType6 size mismatch");
+        if (@alignOf(TryType6) != 8) @compileError("TryType6 alignment mismatch");
+        if (@offsetOf(TryType6, "tag") != 24) @compileError("TryType6 tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(TryType6) != 16) @compileError("TryType6 size mismatch");
+        if (@alignOf(TryType6) != 4) @compileError("TryType6 alignment mismatch");
+        if (@offsetOf(TryType6, "tag") != 12) @compileError("TryType6 tag offset mismatch");
+    }
+}
+
+/// Tag discriminant for Try.
+pub const TryType11Tag = enum(u8) {
+    Err = 0,
+    Ok = 1,
+};
+
+/// Payload union for Try.
+pub const TryType11Payload = extern union {
+        err: i32,
+        ok: void,
+};
+
+/// Tag union: Try
+pub const TryType11 = if (@sizeOf(usize) == 4) extern struct {
+    payload: [4]u8 align(4),
+    tag: TryType11Tag,
+    pub fn payload_err(self: *const @This()) i32 {
+        const ptr: *const i32 = @ptrCast(@alignCast(&self.payload));
+        return ptr.*;
+    }
+} else extern struct {
+    payload: TryType11Payload,
+    tag: TryType11Tag,
+    pub fn payload_err(self: *const @This()) i32 {
+        return self.payload.err;
+    }
+};
+
+comptime {
+    if (@sizeOf(usize) == 8) {
+        if (@sizeOf(TryType11) != 8) @compileError("TryType11 size mismatch");
+        if (@alignOf(TryType11) != 4) @compileError("TryType11 alignment mismatch");
+        if (@offsetOf(TryType11, "tag") != 4) @compileError("TryType11 tag offset mismatch");
+    }
+    if (@sizeOf(usize) == 4) {
+        if (@sizeOf(TryType11) != 8) @compileError("TryType11 size mismatch");
+        if (@alignOf(TryType11) != 4) @compileError("TryType11 alignment mismatch");
+        if (@offsetOf(TryType11, "tag") != 4) @compileError("TryType11 tag offset mismatch");
+    }
+}
+
+/// Arguments for Host.stderr_line!
+/// Roc signature: Str => Try({}, [StderrErr(Str)])
 /// Refcounted fields are owned by the hosted function.
-pub const StderrLineArgs = extern struct {
+pub const HostStderr_lineArgs = extern struct {
     arg0: RocStr,
 };
 
-/// Arguments for Stdout.line!
-/// Roc signature: Str => {}
+/// Arguments for Host.stdout_line!
+/// Roc signature: Str => Try({}, [StdoutErr(Str)])
 /// Refcounted fields are owned by the hosted function.
-pub const StdoutLineArgs = extern struct {
+pub const HostStdout_lineArgs = extern struct {
     arg0: RocStr,
 };
 
@@ -594,8 +753,72 @@ pub const StdoutLineArgs = extern struct {
 // Generated Refcount Helpers
 // =============================================================================
 
-/// Recursively decrement Roc-owned payloads in Try.
-pub fn decrefTry(value: Try, roc_host: *RocHost) void {
+/// Recursively decrement Roc-owned payloads in TryType0.
+pub fn decrefTryType0(value: TryType0, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+        value.payload_err().decref(roc_host);
+        },
+        .Ok => {},
+    }
+}
+
+/// Increment Roc-owned payloads in TryType0.
+pub fn increfTryType0(value: TryType0, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+        value.payload_err().incref(amount);
+        },
+        .Ok => {},
+    }
+}
+
+/// Recursively decrement Roc-owned payloads in TryType4.
+pub fn decrefTryType4(value: TryType4, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+        value.payload_err().decref(roc_host);
+        },
+        .Ok => {
+        value.payload_ok().decref(roc_host);
+        },
+    }
+}
+
+/// Increment Roc-owned payloads in TryType4.
+pub fn increfTryType4(value: TryType4, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+        value.payload_err().incref(amount);
+        },
+        .Ok => {
+        value.payload_ok().incref(amount);
+        },
+    }
+}
+
+/// Recursively decrement Roc-owned payloads in TryType6.
+pub fn decrefTryType6(value: TryType6, roc_host: *RocHost) void {
+    switch (value.tag) {
+        .Err => {
+        value.payload_err().decref(roc_host);
+        },
+        .Ok => {},
+    }
+}
+
+/// Increment Roc-owned payloads in TryType6.
+pub fn increfTryType6(value: TryType6, amount: isize) void {
+    switch (value.tag) {
+        .Err => {
+        value.payload_err().incref(amount);
+        },
+        .Ok => {},
+    }
+}
+
+/// Recursively decrement Roc-owned payloads in TryType11.
+pub fn decrefTryType11(value: TryType11, roc_host: *RocHost) void {
     _ = roc_host;
     switch (value.tag) {
         .Err => {},
@@ -603,8 +826,8 @@ pub fn decrefTry(value: Try, roc_host: *RocHost) void {
     }
 }
 
-/// Increment Roc-owned payloads in Try.
-pub fn increfTry(value: Try, amount: isize) void {
+/// Increment Roc-owned payloads in TryType11.
+pub fn increfTryType11(value: TryType11, amount: isize) void {
     _ = amount;
     switch (value.tag) {
         .Err => {},
@@ -633,17 +856,17 @@ pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 // Refcounted arguments are owned by the hosted function.
 // =============================================================================
 
-/// Hosted symbol for Stderr.line!
-/// Roc signature: Str => {}
-pub extern fn roc_stderr_line(arg0: RocStr) callconv(.c) void;
+/// Hosted symbol for Host.stderr_line!
+/// Roc signature: Str => Try({}, [StderrErr(Str)])
+pub extern fn roc_stderr_line(arg0: RocStr) callconv(.c) TryType0;
 
-/// Hosted symbol for Stdin.line!
-/// Roc signature: {} => Str
-pub extern fn roc_stdin_line() callconv(.c) RocStr;
+/// Hosted symbol for Host.stdin_line!
+/// Roc signature: {} => Try(Str, [StdinErr(Str)])
+pub extern fn roc_stdin_line() callconv(.c) TryType4;
 
-/// Hosted symbol for Stdout.line!
-/// Roc signature: Str => {}
-pub extern fn roc_stdout_line(arg0: RocStr) callconv(.c) void;
+/// Hosted symbol for Host.stdout_line!
+/// Roc signature: Str => Try({}, [StdoutErr(Str)])
+pub extern fn roc_stdout_line(arg0: RocStr) callconv(.c) TryType6;
 
 
 /// Default memory management functions for Roc platforms.

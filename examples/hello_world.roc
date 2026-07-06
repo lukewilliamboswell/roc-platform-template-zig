@@ -1,8 +1,9 @@
-app [main!] { pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst" }
+app [main!] { pf: platform "../platform/main.roc" }
 
 import pf.Stdout
 
+main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
 main! = |_args| {
-    Stdout.line!("Hello, World!")
+    Stdout.line!("Hello, World!")?
     Ok({})
 }

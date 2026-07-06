@@ -1,4 +1,4 @@
-app [main!] { pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst" }
+app [main!] { pf: platform "../platform/main.roc" }
 
 import pf.Stdout
 import pf.Stdout as StdoutAlias
@@ -95,7 +95,7 @@ multiline_str = |number|
 
 # end name with `!` for effectful functions
 # `=>` shows effectfulness in the type signature
-effect_demo! : Str => {}
+effect_demo! : Str => Try({}, [StdoutErr(Str), ..])
 effect_demo! = |msg|
 	Stdout.line!(msg)
 
@@ -149,6 +149,7 @@ while_loop = |limit| {
 	$sum
 }
 
+print! : _ => Try({}, [StdoutErr(Str), ..])
 print! = |something| {
 	Stdout.line!(Str.inspect(something))
 }
@@ -317,85 +318,86 @@ letter_to_str = |letter| match letter {
 stringify : a -> Str where [a.to_str : a -> Str]
 stringify = |value| value.to_str()
 
+main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
 main! = |_args| {
-	Stdout.line!("Hello, world!")
-	StdoutAlias.line!("Hello, world! (using alias)")
+	Stdout.line!("Hello, world!")?
+	StdoutAlias.line!("Hello, world! (using alias)")?
 
-	Stdout.line!(Str.inspect(number_operators(10, 5)))
-	print!(boolean_operators(Bool.True, Bool.False))
+	Stdout.line!(Str.inspect(number_operators(10, 5)))?
+	print!(boolean_operators(Bool.True, Bool.False))?
 
 	# pizza operator (|>) is gone, we now have static dispatch instead.
 	# It allows you to call methods that are defined on the type (like `Animal.is_eq` above).
-	print!("One".concat(" Two"))
+	print!("One".concat(" Two"))?
 
 	# If you want a very similar style for a function that is not defined on the type but is in scope, you can use `->`:
-	print!("Three"->my_concat(" Four"))
+	print!("Three"->my_concat(" Four"))?
 
-	Stdout.line!(simple_match(Red))
-	print!(match_list_patterns([1, 10]))
-	Stdout.line!(match_tag_union_advanced(Ok({})))
+	Stdout.line!(simple_match(Red))?
+	print!(match_list_patterns([1, 10]))?
+	Stdout.line!(match_tag_union_advanced(Ok({})))?
 
-	Stdout.line!(multiline_str(3))
-	Stdout.line!("Unicode escape sequence: \u(00A0)")
+	Stdout.line!(multiline_str(3))?
+	Stdout.line!("Unicode escape sequence: \u(00A0)")?
 
-	effect_demo!("This is an effectful function!")
+	effect_demo!("This is an effectful function!")?
 
 	#Stdout.line!(Str.inspect(question_postfix(["1", "not a number", "100"])))
 
 	sum = for_loop([1, 2, 3, 4, 5])
-	print!(sum)
+	print!(sum)?
 
 	expect sum == 15
 
 	all_true = break_in_for_loop([True, True, False, True, True])
-	print!(all_true)
+	print!(all_true)?
 
     while_sum = while_loop(5)
-	print!(while_sum)
+	print!(while_sum)?
 
-	print!(dbg_keyword())
+	print!(dbg_keyword())?
 
-	Stdout.line!(if_demo(2))
+	Stdout.line!(if_demo(2))?
 
-	print!(tuple_demo)
+	print!(tuple_demo)?
 
-	print!(type_var(["a", "b"]))
+	print!(type_var(["a", "b"]))?
 
-	print!(destructuring())
+	print!(destructuring())?
 
 	# print!(record_update)
 
-	print!({ x: 10, y: 20 }.x)
+	print!({ x: 10, y: 20 }.x)?
 
-	print!(record_update_2({ name: "Alice", age: 30 }))
+	print!(record_update_2({ name: "Alice", age: 30 }))?
 
-	print!(number_literals)
+	print!(number_literals)?
 
 	secret = Secret.new("my_secret_key")
 	# This print will not expose internal data.
-	print!(secret)
-	print!(secret.unlock("open sesame"))
+	print!(secret)?
+	print!(secret.unlock("open sesame"))?
 
 	dog : Animal
 	dog = Dog("Fido")
 	cat : Animal
 	cat = Cat("Whiskers")
-	print!(dog == cat)
+	print!(dog == cat)?
 
-	print!(early_return(Bool.False))
+	print!(early_return(Bool.False))?
 
-	print!(stringify(12345))
+	print!(stringify(12345))?
 
 	# Tags with multiple payloads
-	print!(multi_payload_tag(Foo(42, "hello")))
+	print!(multi_payload_tag(Foo(42, "hello")))?
 
 	# Open tag unions with `..`
 	# This function accepts [Red, Green, ..] so we can pass Blue too
-	print!(color_to_str(Blue))
+	print!(color_to_str(Blue))?
 
 	# Type alias for extensible tag union
-	print!(letter_to_str(A))
-	print!(letter_to_str(C)) # C is not in [A, B] but we passed it in the signature of letter_to_str
+	print!(letter_to_str(A))?
+	print!(letter_to_str(C))? # C is not in [A, B] but we passed it in the signature of letter_to_str
 
 	# TODO Stdout.line!(readme);
 
@@ -405,5 +407,5 @@ main! = |_args| {
 	Ok({})
 }
 
-# Top level expects only run when using `roc test file.roc`
+## Top-level expects run when using `roc test file.roc`.
 expect Bool.True != Bool.False
