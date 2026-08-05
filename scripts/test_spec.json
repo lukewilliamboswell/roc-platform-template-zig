@@ -1,0 +1,163 @@
+{
+  "stages": {
+    "check": true,
+    "test": false,
+    "build": true,
+    "run": true
+  },
+  "apps": [
+    {
+      "path": "examples/cli_args.roc",
+      "cases": [
+        {
+          "name": "no-extra-arguments",
+          "stdout_contains": ["Hello Roc!", "Args:"]
+        },
+        {
+          "name": "extra-arguments",
+          "args": ["alpha", "beta"],
+          "stdout_contains": ["Hello Roc!", "alpha, beta"]
+        }
+      ]
+    },
+    {
+      "path": "examples/hello_world.roc",
+      "cases": [
+        {
+          "name": "happy",
+          "stdout_contains": ["Hello, World!"]
+        }
+      ]
+    },
+    {
+      "path": "examples/fizzbuzz.roc",
+      "cases": [
+        {
+          "name": "happy",
+          "stdout_contains": ["1\n2\nFizz\n4\nBuzz", "FizzBuzz\n"]
+        }
+      ]
+    },
+    {
+      "path": "examples/match.roc",
+      "cases": [
+        {
+          "name": "no-extra-arguments",
+          "stdout_contains": [
+            "match no extra args: yes",
+            "match extra args: no"
+          ]
+        },
+        {
+          "name": "extra-argument",
+          "args": ["extra"],
+          "stdout_contains": [
+            "match no extra args: no",
+            "match extra args: yes"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "examples/stderr.roc",
+      "cases": [
+        {
+          "name": "separate-streams",
+          "stdout_contains": ["This message goes to stdout"],
+          "stderr_contains": ["This message goes to stderr"]
+        }
+      ]
+    },
+    {
+      "path": "examples/sum_fold.roc",
+      "cases": [
+        {
+          "name": "happy",
+          "stdout_contains": [
+            "Joined: Hello World!",
+            "Fruits: apple, banana, cherry"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "examples/exit.roc",
+      "cases": [
+        {
+          "name": "explicit-exit",
+          "exit_code": 23,
+          "stdout_contains": ["This example exits with a non-zero exit code"]
+        },
+        {
+          "name": "successful-exit",
+          "args": ["success"],
+          "stdout_contains": ["This example exits successfully"]
+        }
+      ]
+    },
+    {
+      "path": "examples/echo.roc",
+      "cases": [
+        {
+          "name": "one-line",
+          "stdin": "Roc\n",
+          "stdout_contains": [
+            "Enter something and I'll echo it back:",
+            "You entered: Roc"
+          ]
+        },
+        {
+          "name": "end-of-input",
+          "stdout_contains": [
+            "Enter something and I'll echo it back:",
+            "You entered:"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "examples/echo_multiline.roc",
+      "cases": [
+        {
+          "name": "multiple-lines",
+          "stdin": "line one\nline two\nline three\n",
+          "stdout_contains": ["line one\nline two\nline three\n"]
+        },
+        {
+          "name": "empty-input"
+        }
+      ]
+    },
+    {
+      "path": "examples/tests.roc",
+      "stages": { "test": true },
+      "cases": [
+        {
+          "name": "happy",
+          "stdout_contains": ["Run 'roc test --verbose examples/tests.roc'"]
+        }
+      ]
+    },
+    {
+      "path": "examples/dbg_test.roc",
+      "build_args": ["--opt=dev"],
+      "cases": [
+        {
+          "name": "debug-output",
+          "stdout_contains": ["stdout works"],
+          "stderr_contains": ["[ROC DBG]", "test message"]
+        }
+      ]
+    },
+    {
+      "path": "examples/all_roc_syntax.roc",
+      "stages": { "test": true },
+      "cases": [
+        {
+          "name": "happy",
+          "stdout_contains": ["Hello, world!", "other letter"]
+        }
+      ]
+    }
+  ]
+}

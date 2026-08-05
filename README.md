@@ -38,16 +38,19 @@ zig build docs
 
 The checked-in examples use the latest release bundle so they can be copied directly. `zig build test` rewrites temporary copies to use the local `platform/main.roc` before running them.
 
+[`scripts/test_spec.json`](scripts/test_spec.json) is the source of truth for example coverage. Every example has one entry and can define any number of named cases. A case can provide command-line arguments, stdin, environment variables, an expected exit code, and combined or stream-specific output assertions. The runner builds each example once and reuses that binary for all of its cases on Linux, macOS, and Windows.
+
 ```
 $ zig build test
-roc Roc compiler version ...
+All test stages passed (check: 12, test: 2, build: 12, run: 17)
+```
 
-  check: 12/12 passed
-  run (interpreter): 10/10 passed
-  build+run (compiled): 9/9 passed
-  roc test: 2/2 passed
+Run the spec directly against another examples directory or only selected stages:
 
-All 33 tests passed
+```bash
+python3 scripts/test.py --examples-dir examples
+python3 scripts/test.py --operation validate
+python3 scripts/test.py --operation run
 ```
 
 ## Building

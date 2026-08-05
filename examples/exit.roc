@@ -3,7 +3,12 @@ app [main!] { pf: platform "https://github.com/lukewilliamboswell/roc-platform-t
 import pf.Stdout
 
 main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
-main! = |_args| {
-    Stdout.line!("This example exits with a non-zero exit code")?
-    Err(Exit(23))
+main! = |args| {
+	if args.len() > 1 {
+		Stdout.line!("This example exits successfully")?
+		Ok({})
+	} else {
+		Stdout.line!("This example exits with a non-zero exit code")?
+		Err(Exit(23))
+	}
 }

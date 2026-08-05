@@ -193,16 +193,6 @@ pub fn build(b: *std.Build) void {
 
     const run_host_tests = b.addRunArtifact(host_tests);
 
-    // Integration test runner
-    const test_runner = b.addExecutable(.{
-        .name = "test_runner",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("ci/test_runner.zig"),
-            .target = native_target,
-            .optimize = optimize,
-        }),
-    });
-
     const local_examples_dir = ".zig-cache/local-examples";
     const prepare_local_examples = b.addSystemCommand(&.{
         "bash",
@@ -210,13 +200,17 @@ pub fn build(b: *std.Build) void {
         local_examples_dir,
     });
 
-    const run_integration = b.addRunArtifact(test_runner);
+    const run_integration = b.addSystemCommand(&.{
+        "python3",
+        "scripts/test.py",
+        "--examples-dir",
+        ".zig-cache/local-examples/examples",
+    });
     // Integration tests need the native platform library to be built first
     run_integration.step.dependOn(&copy_native.step);
     // The checked-in examples use the latest release URL; local tests should
     // exercise the platform in this checkout.
     run_integration.step.dependOn(&prepare_local_examples.step);
-    run_integration.addArgs(&.{ "--examples-dir", ".zig-cache/local-examples/examples" });
     // Run integration after unit tests
     run_integration.step.dependOn(&run_host_tests.step);
     // Pass through args (e.g. --verbose)
