@@ -7,20 +7,34 @@ const RocTarget = enum {
     x64mac,
     x64win,
     x64musl,
+    x64v1musl,
 
     // arm64 (aarch64) targets
     arm64mac,
     arm64win,
     arm64musl,
+    arm64v1musl,
 
     fn toZigTarget(self: RocTarget) std.Target.Query {
         return switch (self) {
             .x64mac => .{ .cpu_arch = .x86_64, .os_tag = .macos },
             .x64win => .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .msvc },
             .x64musl => .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
+            .x64v1musl => .{
+                .cpu_arch = .x86_64,
+                .cpu_model = .{ .explicit = &std.Target.x86.cpu.x86_64 },
+                .os_tag = .linux,
+                .abi = .musl,
+            },
             .arm64mac => .{ .cpu_arch = .aarch64, .os_tag = .macos },
             .arm64win => .{ .cpu_arch = .aarch64, .os_tag = .windows, .abi = .msvc },
             .arm64musl => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl },
+            .arm64v1musl => .{
+                .cpu_arch = .aarch64,
+                .cpu_model = .{ .explicit = &std.Target.aarch64.cpu.generic },
+                .os_tag = .linux,
+                .abi = .musl,
+            },
         };
     }
 
@@ -29,9 +43,11 @@ const RocTarget = enum {
             .x64mac => "x64mac",
             .x64win => "x64win",
             .x64musl => "x64musl",
+            .x64v1musl => "x64v1musl",
             .arm64mac => "arm64mac",
             .arm64win => "arm64win",
             .arm64musl => "arm64musl",
+            .arm64v1musl => "arm64v1musl",
         };
     }
 
@@ -41,6 +57,22 @@ const RocTarget = enum {
             else => "libhost.a",
         };
     }
+
+    fn baselineMuslTarget(self: RocTarget) ?RocTarget {
+        return switch (self) {
+            .x64musl => .x64v1musl,
+            .arm64musl => .arm64v1musl,
+            else => null,
+        };
+    }
+
+    fn muslRuntimeSourceTarget(self: RocTarget) ?RocTarget {
+        return switch (self) {
+            .x64v1musl => .x64musl,
+            .arm64v1musl => .arm64musl,
+            else => null,
+        };
+    }
 };
 
 /// All cross-compilation targets for `zig build`
@@ -48,9 +80,11 @@ const all_targets = [_]RocTarget{
     .x64mac,
     .x64win,
     .x64musl,
+    .x64v1musl,
     .arm64mac,
     .arm64win,
     .arm64musl,
+    .arm64v1musl,
 };
 
 pub fn build(b: *std.Build) void {
@@ -84,6 +118,15 @@ pub fn build(b: *std.Build) void {
             host_lib.getEmittedBin(),
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
         );
+
+        if (roc_target.muslRuntimeSourceTarget()) |runtime_source_target| {
+            for ([2][]const u8{ "crt1.o", "libc.a" }) |filename| {
+                copy_all.addCopyFileToSource(
+                    b.path(b.pathJoin(&.{ "platform", "targets", runtime_source_target.targetDir(), filename })),
+                    b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), filename }),
+                );
+            }
+        }
     }
 
     // Native step: build only for the current platform (with full cleanup first)
@@ -106,6 +149,21 @@ pub fn build(b: *std.Build) void {
         native_lib.getEmittedBin(),
         b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), native_roc_target.libFilename() }),
     );
+
+    if (native_roc_target.baselineMuslTarget()) |baseline_roc_target| {
+        const baseline_lib = buildHostLib(b, b.resolveTargetQuery(baseline_roc_target.toZigTarget()), optimize);
+        copy_native.addCopyFileToSource(
+            baseline_lib.getEmittedBin(),
+            b.pathJoin(&.{ "platform", "targets", baseline_roc_target.targetDir(), baseline_roc_target.libFilename() }),
+        );
+        for ([2][]const u8{ "crt1.o", "libc.a" }) |filename| {
+            copy_native.addCopyFileToSource(
+                b.path(b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), filename })),
+                b.pathJoin(&.{ "platform", "targets", baseline_roc_target.targetDir(), filename }),
+            );
+        }
+        native_step.dependOn(&baseline_lib.step);
+    }
     native_step.dependOn(&copy_native.step);
     native_step.dependOn(&native_lib.step);
 
@@ -135,16 +193,6 @@ pub fn build(b: *std.Build) void {
 
     const run_host_tests = b.addRunArtifact(host_tests);
 
-    // Integration test runner
-    const test_runner = b.addExecutable(.{
-        .name = "test_runner",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("ci/test_runner.zig"),
-            .target = native_target,
-            .optimize = optimize,
-        }),
-    });
-
     const local_examples_dir = ".zig-cache/local-examples";
     const prepare_local_examples = b.addSystemCommand(&.{
         "bash",
@@ -152,13 +200,17 @@ pub fn build(b: *std.Build) void {
         local_examples_dir,
     });
 
-    const run_integration = b.addRunArtifact(test_runner);
+    const run_integration = b.addSystemCommand(&.{
+        "python3",
+        "scripts/test.py",
+        "--examples-dir",
+        ".zig-cache/local-examples/examples",
+    });
     // Integration tests need the native platform library to be built first
     run_integration.step.dependOn(&copy_native.step);
     // The checked-in examples use the latest release URL; local tests should
     // exercise the platform in this checkout.
     run_integration.step.dependOn(&prepare_local_examples.step);
-    run_integration.addArgs(&.{ "--examples-dir", ".zig-cache/local-examples/examples" });
     // Run integration after unit tests
     run_integration.step.dependOn(&run_host_tests.step);
     // Pass through args (e.g. --verbose)

@@ -127,4 +127,4 @@ if rewritten == 0:
     raise SystemExit("no examples found to test")
 PY
 
-zig run ci/test_runner.zig -- --verbose --examples-dir "$work_dir/examples"
+python3 scripts/test.py --verbose --examples-dir "$work_dir/examples"
