@@ -13,6 +13,7 @@ const RocTarget = enum {
     arm64mac,
     arm64win,
     arm64musl,
+    arm64v1musl,
 
     fn toZigTarget(self: RocTarget) std.Target.Query {
         return switch (self) {
@@ -28,6 +29,12 @@ const RocTarget = enum {
             .arm64mac => .{ .cpu_arch = .aarch64, .os_tag = .macos },
             .arm64win => .{ .cpu_arch = .aarch64, .os_tag = .windows, .abi = .msvc },
             .arm64musl => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl },
+            .arm64v1musl => .{
+                .cpu_arch = .aarch64,
+                .cpu_model = .{ .explicit = &std.Target.aarch64.cpu.generic },
+                .os_tag = .linux,
+                .abi = .musl,
+            },
         };
     }
 
@@ -40,6 +47,7 @@ const RocTarget = enum {
             .arm64mac => "arm64mac",
             .arm64win => "arm64win",
             .arm64musl => "arm64musl",
+            .arm64v1musl => "arm64v1musl",
         };
     }
 
@@ -47,6 +55,22 @@ const RocTarget = enum {
         return switch (self) {
             .x64win, .arm64win => "host.lib",
             else => "libhost.a",
+        };
+    }
+
+    fn baselineMuslTarget(self: RocTarget) ?RocTarget {
+        return switch (self) {
+            .x64musl => .x64v1musl,
+            .arm64musl => .arm64v1musl,
+            else => null,
+        };
+    }
+
+    fn muslRuntimeSourceTarget(self: RocTarget) ?RocTarget {
+        return switch (self) {
+            .x64v1musl => .x64musl,
+            .arm64v1musl => .arm64musl,
+            else => null,
         };
     }
 };
@@ -60,6 +84,7 @@ const all_targets = [_]RocTarget{
     .arm64mac,
     .arm64win,
     .arm64musl,
+    .arm64v1musl,
 };
 
 pub fn build(b: *std.Build) void {
@@ -94,11 +119,11 @@ pub fn build(b: *std.Build) void {
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
         );
 
-        if (roc_target == .x64v1musl) {
+        if (roc_target.muslRuntimeSourceTarget()) |runtime_source_target| {
             for ([2][]const u8{ "crt1.o", "libc.a" }) |filename| {
                 copy_all.addCopyFileToSource(
-                    b.path(b.pathJoin(&.{ "platform", "targets", "x64musl", filename })),
-                    b.pathJoin(&.{ "platform", "targets", "x64v1musl", filename }),
+                    b.path(b.pathJoin(&.{ "platform", "targets", runtime_source_target.targetDir(), filename })),
+                    b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), filename }),
                 );
             }
         }
@@ -125,16 +150,16 @@ pub fn build(b: *std.Build) void {
         b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), native_roc_target.libFilename() }),
     );
 
-    if (native_roc_target == .x64musl) {
-        const baseline_lib = buildHostLib(b, b.resolveTargetQuery(RocTarget.x64v1musl.toZigTarget()), optimize);
+    if (native_roc_target.baselineMuslTarget()) |baseline_roc_target| {
+        const baseline_lib = buildHostLib(b, b.resolveTargetQuery(baseline_roc_target.toZigTarget()), optimize);
         copy_native.addCopyFileToSource(
             baseline_lib.getEmittedBin(),
-            b.pathJoin(&.{ "platform", "targets", "x64v1musl", RocTarget.x64v1musl.libFilename() }),
+            b.pathJoin(&.{ "platform", "targets", baseline_roc_target.targetDir(), baseline_roc_target.libFilename() }),
         );
         for ([2][]const u8{ "crt1.o", "libc.a" }) |filename| {
             copy_native.addCopyFileToSource(
-                b.path(b.pathJoin(&.{ "platform", "targets", "x64musl", filename })),
-                b.pathJoin(&.{ "platform", "targets", "x64v1musl", filename }),
+                b.path(b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), filename })),
+                b.pathJoin(&.{ "platform", "targets", baseline_roc_target.targetDir(), filename }),
             );
         }
         native_step.dependOn(&baseline_lib.step);
