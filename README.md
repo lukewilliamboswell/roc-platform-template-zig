@@ -85,8 +85,9 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 | x64mac | `platform/targets/x64mac/libhost.a` |
 | x64win | `platform/targets/x64win/host.lib` |
 | x64musl | `platform/targets/x64musl/libhost.a` |
+| x64v1musl | `platform/targets/x64v1musl/libhost.a` |
 | arm64mac | `platform/targets/arm64mac/libhost.a` |
 | arm64win | `platform/targets/arm64win/host.lib` |
 | arm64musl | `platform/targets/arm64musl/libhost.a` |
 
-Linux musl targets include statically linked C runtime files (`crt1.o`, `libc.a`) for standalone executables.
+Linux musl targets include statically linked C runtime files (`crt1.o`, `libc.a`) for standalone executables. `x64v1musl` targets the baseline x86-64 instruction set for CPUs without the features required by `x64musl`.

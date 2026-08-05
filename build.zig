@@ -7,6 +7,7 @@ const RocTarget = enum {
     x64mac,
     x64win,
     x64musl,
+    x64v1musl,
 
     // arm64 (aarch64) targets
     arm64mac,
@@ -18,6 +19,12 @@ const RocTarget = enum {
             .x64mac => .{ .cpu_arch = .x86_64, .os_tag = .macos },
             .x64win => .{ .cpu_arch = .x86_64, .os_tag = .windows, .abi = .msvc },
             .x64musl => .{ .cpu_arch = .x86_64, .os_tag = .linux, .abi = .musl },
+            .x64v1musl => .{
+                .cpu_arch = .x86_64,
+                .cpu_model = .{ .explicit = &std.Target.x86.cpu.x86_64 },
+                .os_tag = .linux,
+                .abi = .musl,
+            },
             .arm64mac => .{ .cpu_arch = .aarch64, .os_tag = .macos },
             .arm64win => .{ .cpu_arch = .aarch64, .os_tag = .windows, .abi = .msvc },
             .arm64musl => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl },
@@ -29,6 +36,7 @@ const RocTarget = enum {
             .x64mac => "x64mac",
             .x64win => "x64win",
             .x64musl => "x64musl",
+            .x64v1musl => "x64v1musl",
             .arm64mac => "arm64mac",
             .arm64win => "arm64win",
             .arm64musl => "arm64musl",
@@ -48,6 +56,7 @@ const all_targets = [_]RocTarget{
     .x64mac,
     .x64win,
     .x64musl,
+    .x64v1musl,
     .arm64mac,
     .arm64win,
     .arm64musl,
@@ -84,6 +93,15 @@ pub fn build(b: *std.Build) void {
             host_lib.getEmittedBin(),
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
         );
+
+        if (roc_target == .x64v1musl) {
+            for ([2][]const u8{ "crt1.o", "libc.a" }) |filename| {
+                copy_all.addCopyFileToSource(
+                    b.path(b.pathJoin(&.{ "platform", "targets", "x64musl", filename })),
+                    b.pathJoin(&.{ "platform", "targets", "x64v1musl", filename }),
+                );
+            }
+        }
     }
 
     // Native step: build only for the current platform (with full cleanup first)
@@ -106,6 +124,21 @@ pub fn build(b: *std.Build) void {
         native_lib.getEmittedBin(),
         b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), native_roc_target.libFilename() }),
     );
+
+    if (native_roc_target == .x64musl) {
+        const baseline_lib = buildHostLib(b, b.resolveTargetQuery(RocTarget.x64v1musl.toZigTarget()), optimize);
+        copy_native.addCopyFileToSource(
+            baseline_lib.getEmittedBin(),
+            b.pathJoin(&.{ "platform", "targets", "x64v1musl", RocTarget.x64v1musl.libFilename() }),
+        );
+        for ([2][]const u8{ "crt1.o", "libc.a" }) |filename| {
+            copy_native.addCopyFileToSource(
+                b.path(b.pathJoin(&.{ "platform", "targets", "x64musl", filename })),
+                b.pathJoin(&.{ "platform", "targets", "x64v1musl", filename }),
+            );
+        }
+        native_step.dependOn(&baseline_lib.step);
+    }
     native_step.dependOn(&copy_native.step);
     native_step.dependOn(&native_lib.step);
 
