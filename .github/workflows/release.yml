@@ -34,10 +34,14 @@ jobs:
           version: 0.16.0
           use-cache: false
 
+      - name: Read pinned Roc version
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+
       - name: Install Roc nightly
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
         with:
           version: nightly-new-compiler
+          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
       - name: Build platform with ReleaseSafe
         run: zig build -Doptimize=ReleaseSafe
@@ -99,10 +103,14 @@ jobs:
           version: 0.16.0
           use-cache: false
 
+      - name: Read pinned Roc version
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+
       - name: Install Roc nightly
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
         with:
           version: nightly-new-compiler
+          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
       - name: Download bundle artifact
         uses: actions/download-artifact@v4
@@ -123,10 +131,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Read pinned Roc version
+        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+
       - name: Install Roc nightly
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
         with:
           version: nightly-new-compiler
+          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
       - name: Generate docs
         run: |
