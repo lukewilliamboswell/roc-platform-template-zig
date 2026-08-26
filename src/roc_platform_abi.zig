@@ -5,7 +5,12 @@
 //!
 //! Hosted argument ownership:
 //! - Roc transfers ownership of refcounted arguments to the hosted function.
-//! - The hosted function must decref owned refcounted arguments when done.
+//! - The hosted function must release owned refcounted arguments when done, using
+//!   the release call named in each hosted symbol's doc comment below.
+//! - Releasing a container releases its elements only when the container's own
+//!   count reaches zero, which is what compiled Roc code does when it drops one
+//!   it owns. Releasing the elements unconditionally double-frees them whenever
+//!   the Roc caller still holds the container.
 //! - If the host stores or returns an argument, it must retain or transfer ownership explicitly.
 //!
 //! Import this file from the platform host and implement the listed hosted symbols
@@ -13,6 +18,33 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
+
+/// Runtime representation of Roc's fixed-point `Dec` value.
+///
+/// `num` stores the decimal value scaled by 10^18.
+pub const RocDec = extern struct {
+    num: i128,
+};
+
+comptime {
+    if (@sizeOf(RocDec) != 16) @compileError("RocDec size mismatch");
+    if (@alignOf(RocDec) != 16) @compileError("RocDec alignment mismatch");
+}
+
+pub const RocU8x16 = @Vector(16, u8);
+pub const RocI8x16 = @Vector(16, i8);
+pub const RocU16x8 = @Vector(8, u16);
+pub const RocI16x8 = @Vector(8, i16);
+pub const RocU32x4 = @Vector(4, u32);
+pub const RocI32x4 = @Vector(4, i32);
+pub const RocU64x2 = @Vector(2, u64);
+pub const RocI64x2 = @Vector(2, i64);
+comptime {
+    for (.{ RocU8x16, RocI8x16, RocU16x8, RocI16x8, RocU32x4, RocI32x4, RocU64x2, RocI64x2 }) |T| {
+        if (@sizeOf(T) != 16) @compileError("Roc SIMD size mismatch");
+        if (@alignOf(T) != 16) @compileError("Roc SIMD alignment mismatch");
+    }
+}
 
 /// Runtime representation of an opaque `Box(T)` value.
 pub const RocBox = ?*anyopaque;
@@ -32,7 +64,13 @@ pub const RocHost = extern struct {
 };
 
 /// Private erased-callable function pointer stored in `RocErasedCallablePayload`.
-pub const RocErasedCallableFn = *const fn (*RocHost, ?[*]u8, ?[*]const u8, ?[*]u8) callconv(.c) void;
+///
+/// The final `reuse` pointer is nullable. Non-null must be the callable data
+/// pointer whose inline capture begins at `capture`; it transfers one owned
+/// reference to the callee. The caller must not use or decref that ownership
+/// unit after the call. The callee consumes it exactly once, whether or not the
+/// result can reuse the allocation.
+pub const RocErasedCallableFn = *const fn (*RocHost, ?[*]u8, ?[*]const u8, ?[*]u8, ?[*]u8, *?*const anyopaque) callconv(.c) void;
 
 /// Final-drop callback for inline erased-callable captures.
 pub const RocErasedCallableOnDrop = *const fn (?[*]u8, *RocHost) callconv(.c) void;
@@ -305,7 +343,7 @@ pub const RocStr = extern struct {
         const alloc_ptr = self.getAllocationPtr() orelse return;
         const data_addr = @intFromPtr(alloc_ptr);
         const rc: *isize = @ptrFromInt(data_addr - @sizeOf(isize));
-        if (rc.* == 0) return; // REFCOUNT_STATIC_DATA — bytes are in read-only memory
+        if (rc.* == 0) return; // REFCOUNT_STATIC_DATA—bytes are in read-only memory
         const prev = @atomicRmw(isize, rc, .Sub, 1, .monotonic);
         if (prev == 1) {
             const ptr_width = @sizeOf(usize);
@@ -328,7 +366,7 @@ pub const RocStr = extern struct {
         if (self.isSmallStr()) return true;
         const alloc_ptr = self.getAllocationPtr() orelse return true;
         const rc: *const isize = @ptrFromInt(@intFromPtr(alloc_ptr) - @sizeOf(isize));
-        if (rc.* == 0) return true; // REFCOUNT_STATIC_DATA — treated as unique
+        if (rc.* == 0) return true; // REFCOUNT_STATIC_DATA—treated as unique
         return rc.* == 1;
     }
 
@@ -429,6 +467,10 @@ pub fn RocListWith(comptime T: type, comptime elements_refcounted: bool) type {
             const data_ptr = base + header_bytes;
             const rc: *isize = @ptrFromInt(@intFromPtr(data_ptr) - @sizeOf(isize));
             rc.* = 1;
+            if (elements_refcounted) {
+                const count: *usize = @ptrFromInt(@intFromPtr(data_ptr) - (2 * @sizeOf(usize)));
+                count.* = length;
+            }
             return .{
                 .elements_ptr = @ptrCast(@alignCast(data_ptr)),
                 .length = length,
@@ -446,14 +488,48 @@ pub fn RocListWith(comptime T: type, comptime elements_refcounted: bool) type {
             return list;
         }
 
-        /// Decrement the reference count; frees the allocation when it reaches zero.
+        /// Drop this reference to the list allocation, freeing it when this was
+        /// the last one.
+        ///
+        /// Shallow: it never touches the elements. To release an owned list whose
+        /// elements are refcounted, call that list's generated `decrefListOf...`
+        /// helper instead, which drops the elements when this reference is the
+        /// last one and then calls this.
         pub fn decref(self: Self, roc_host: *RocHost) void {
             const alloc_ptr = self.getAllocationPtr() orelse return;
             const data_addr = @intFromPtr(alloc_ptr);
             const rc: *isize = @ptrFromInt(data_addr - @sizeOf(isize));
-            if (rc.* == 0) return; // REFCOUNT_STATIC_DATA — bytes are in read-only memory
+            if (rc.* == 0) return; // REFCOUNT_STATIC_DATA—bytes are in read-only memory
             const prev = @atomicRmw(isize, rc, .Sub, 1, .monotonic);
             if (prev == 1) {
+                const base: *anyopaque = @ptrFromInt(data_addr - header_bytes);
+                roc_host.roc_dealloc(roc_host, base, alloc_align);
+            }
+        }
+
+        /// Recursively release this list and its elements.
+        ///
+        /// The reference-count decrement claims the final reference atomically
+        /// before reading any elements, so concurrent releases cannot skip or
+        /// duplicate element teardown.
+        pub fn deinit(self: Self, roc_host: *RocHost) void {
+            const ItemRelease = if (elements_refcounted) rocReleasePolicy(T) else RocNoopRelease(T);
+            self.deinitWith(ItemRelease, roc_host);
+        }
+
+        /// Recursively release with an explicit compiler-generated item policy.
+        pub fn deinitWith(self: Self, comptime ItemRelease: type, roc_host: *RocHost) void {
+            const alloc_ptr = self.getAllocationPtr() orelse return;
+            const data_addr = @intFromPtr(alloc_ptr);
+            const rc: *isize = @ptrFromInt(data_addr - @sizeOf(isize));
+            if (rc.* == 0) return; // REFCOUNT_STATIC_DATA—elements are in read-only memory
+            const prev = @atomicRmw(isize, rc, .Sub, 1, .acq_rel);
+            if (prev == 1) {
+                if (elements_refcounted) {
+                    for (self.allocationItems()) |item| {
+                        ItemRelease.release(item, roc_host);
+                    }
+                }
                 const base: *anyopaque = @ptrFromInt(data_addr - header_bytes);
                 roc_host.roc_dealloc(roc_host, base, alloc_align);
             }
@@ -471,7 +547,7 @@ pub fn RocListWith(comptime T: type, comptime elements_refcounted: bool) type {
         pub fn isUnique(self: Self) bool {
             const alloc_ptr = self.getAllocationPtr() orelse return true;
             const rc: *const isize = @ptrFromInt(@intFromPtr(alloc_ptr) - @sizeOf(isize));
-            if (rc.* == 0) return true; // REFCOUNT_STATIC_DATA — treated as unique
+            if (rc.* == 0) return true; // REFCOUNT_STATIC_DATA—treated as unique
             return rc.* == 1;
         }
 
@@ -480,6 +556,67 @@ pub fn RocListWith(comptime T: type, comptime elements_refcounted: bool) type {
             const alloc_ptr = self.getAllocationPtr() orelse return false;
             const rc: *const isize = @ptrFromInt(@intFromPtr(alloc_ptr) - @sizeOf(isize));
             return rc.* == 1;
+        }
+    };
+}
+
+pub fn RocNoopRelease(comptime T: type) type {
+    return struct {
+        pub fn release(value: T, roc_host: *RocHost) void {
+            _ = value;
+            _ = roc_host;
+        }
+    };
+}
+
+/// A zero-runtime-storage release policy for one Roc string.
+pub const RocStrRelease = struct {
+    pub fn release(value: RocStr, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+/// Compose a list release policy from its item release policy.
+pub fn RocListRelease(comptime ListType: type, comptime ItemRelease: type) type {
+    return struct {
+        pub fn release(value: ListType, roc_host: *RocHost) void {
+            value.deinitWith(ItemRelease, roc_host);
+        }
+    };
+}
+
+/// Release only a list spine whose elements contain no Roc references.
+pub fn RocListSpineRelease(comptime ListType: type) type {
+    return struct {
+        pub fn release(value: ListType, roc_host: *RocHost) void {
+            value.decref(roc_host);
+        }
+    };
+}
+
+pub const RocErasedCallableRelease = struct {
+    pub fn release(value: RocErasedCallable, roc_host: *RocHost) void {
+        decrefErasedCallable(value, roc_host);
+    }
+};
+
+pub fn RocBoxRelease(comptime ValueType: type, comptime PayloadType: type, comptime PayloadRelease: type) type {
+    return struct {
+        fn releasePayload(data_ptr: ?*anyopaque, roc_host: *RocHost) callconv(.c) void {
+            const payload: *PayloadType = @ptrCast(@alignCast(data_ptr orelse return));
+            PayloadRelease.release(payload.*, roc_host);
+        }
+
+        pub fn release(value: ValueType, roc_host: *RocHost) void {
+            decrefBoxWith(@ptrCast(value), @alignOf(PayloadType), true, &releasePayload, roc_host);
+        }
+    };
+}
+
+pub fn RocBoxSpineRelease(comptime ValueType: type, comptime PayloadType: type) type {
+    return struct {
+        pub fn release(value: ValueType, roc_host: *RocHost) void {
+            decrefBoxWith(@ptrCast(value), @alignOf(PayloadType), false, null, roc_host);
         }
     };
 }
@@ -565,62 +702,80 @@ pub const RocEnv = struct {
 };
 
 /// Tag discriminant for Try.
-pub const TryType0Tag = enum(u8) {
+pub const HostStderr_lineResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
 };
 
 /// Payload union for Try.
-pub const TryType0Payload = extern union {
+pub const HostStderr_lineResultPayload = extern union {
         err: RocStr,
-        ok: void,
+        ok: [0]u8,
 };
 
 /// Tag union: Try
-pub const TryType0 = if (@sizeOf(usize) == 4) extern struct {
+pub const HostStderr_lineResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [12]u8 align(4),
-    tag: TryType0Tag,
+    tag: HostStderr_lineResultTag,
     pub fn payload_err(self: *const @This()) RocStr {
         const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostStderr_lineResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostStderr_lineResult(self, amount);
+    }
 } else extern struct {
-    payload: TryType0Payload,
-    tag: TryType0Tag,
+    payload: HostStderr_lineResultPayload,
+    tag: HostStderr_lineResultTag,
     pub fn payload_err(self: *const @This()) RocStr {
         return self.payload.err;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostStderr_lineResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostStderr_lineResult(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(TryType0) != 32) @compileError("TryType0 size mismatch");
-        if (@alignOf(TryType0) != 8) @compileError("TryType0 alignment mismatch");
-        if (@offsetOf(TryType0, "tag") != 24) @compileError("TryType0 tag offset mismatch");
+        if (@sizeOf(HostStderr_lineResult) != 32) @compileError("HostStderr_lineResult size mismatch");
+        if (@alignOf(HostStderr_lineResult) != 8) @compileError("HostStderr_lineResult alignment mismatch");
+        if (@offsetOf(HostStderr_lineResult, "tag") != 24) @compileError("HostStderr_lineResult tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(TryType0) != 16) @compileError("TryType0 size mismatch");
-        if (@alignOf(TryType0) != 4) @compileError("TryType0 alignment mismatch");
-        if (@offsetOf(TryType0, "tag") != 12) @compileError("TryType0 tag offset mismatch");
+        if (@sizeOf(HostStderr_lineResult) != 16) @compileError("HostStderr_lineResult size mismatch");
+        if (@alignOf(HostStderr_lineResult) != 4) @compileError("HostStderr_lineResult alignment mismatch");
+        if (@offsetOf(HostStderr_lineResult, "tag") != 12) @compileError("HostStderr_lineResult tag offset mismatch");
     }
 }
 
 /// Tag discriminant for Try.
-pub const TryType4Tag = enum(u8) {
+pub const HostStdin_lineResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
 };
 
 /// Payload union for Try.
-pub const TryType4Payload = extern union {
+pub const HostStdin_lineResultPayload = extern union {
         err: RocStr,
         ok: RocStr,
 };
 
 /// Tag union: Try
-pub const TryType4 = if (@sizeOf(usize) == 4) extern struct {
+pub const HostStdin_lineResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [12]u8 align(4),
-    tag: TryType4Tag,
+    tag: HostStdin_lineResultTag,
     pub fn payload_err(self: *const @This()) RocStr {
         const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
@@ -629,109 +784,163 @@ pub const TryType4 = if (@sizeOf(usize) == 4) extern struct {
         const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostStdin_lineResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostStdin_lineResult(self, amount);
+    }
 } else extern struct {
-    payload: TryType4Payload,
-    tag: TryType4Tag,
+    payload: HostStdin_lineResultPayload,
+    tag: HostStdin_lineResultTag,
     pub fn payload_err(self: *const @This()) RocStr {
         return self.payload.err;
     }
     pub fn payload_ok(self: *const @This()) RocStr {
         return self.payload.ok;
     }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostStdin_lineResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostStdin_lineResult(self, amount);
+    }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(TryType4) != 32) @compileError("TryType4 size mismatch");
-        if (@alignOf(TryType4) != 8) @compileError("TryType4 alignment mismatch");
-        if (@offsetOf(TryType4, "tag") != 24) @compileError("TryType4 tag offset mismatch");
+        if (@sizeOf(HostStdin_lineResult) != 32) @compileError("HostStdin_lineResult size mismatch");
+        if (@alignOf(HostStdin_lineResult) != 8) @compileError("HostStdin_lineResult alignment mismatch");
+        if (@offsetOf(HostStdin_lineResult, "tag") != 24) @compileError("HostStdin_lineResult tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(TryType4) != 16) @compileError("TryType4 size mismatch");
-        if (@alignOf(TryType4) != 4) @compileError("TryType4 alignment mismatch");
-        if (@offsetOf(TryType4, "tag") != 12) @compileError("TryType4 tag offset mismatch");
+        if (@sizeOf(HostStdin_lineResult) != 16) @compileError("HostStdin_lineResult size mismatch");
+        if (@alignOf(HostStdin_lineResult) != 4) @compileError("HostStdin_lineResult alignment mismatch");
+        if (@offsetOf(HostStdin_lineResult, "tag") != 12) @compileError("HostStdin_lineResult tag offset mismatch");
     }
 }
 
 /// Tag discriminant for Try.
-pub const TryType6Tag = enum(u8) {
+pub const HostStdout_lineResultTag = enum(u8) {
     Err = 0,
     Ok = 1,
 };
 
 /// Payload union for Try.
-pub const TryType6Payload = extern union {
+pub const HostStdout_lineResultPayload = extern union {
         err: RocStr,
-        ok: void,
+        ok: [0]u8,
 };
 
 /// Tag union: Try
-pub const TryType6 = if (@sizeOf(usize) == 4) extern struct {
+pub const HostStdout_lineResult = if (@sizeOf(usize) == 4) extern struct {
     payload: [12]u8 align(4),
-    tag: TryType6Tag,
+    tag: HostStdout_lineResultTag,
     pub fn payload_err(self: *const @This()) RocStr {
         const ptr: *const RocStr = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostStdout_lineResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostStdout_lineResult(self, amount);
+    }
 } else extern struct {
-    payload: TryType6Payload,
-    tag: TryType6Tag,
+    payload: HostStdout_lineResultPayload,
+    tag: HostStdout_lineResultTag,
     pub fn payload_err(self: *const @This()) RocStr {
         return self.payload.err;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefHostStdout_lineResult(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfHostStdout_lineResult(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(TryType6) != 32) @compileError("TryType6 size mismatch");
-        if (@alignOf(TryType6) != 8) @compileError("TryType6 alignment mismatch");
-        if (@offsetOf(TryType6, "tag") != 24) @compileError("TryType6 tag offset mismatch");
+        if (@sizeOf(HostStdout_lineResult) != 32) @compileError("HostStdout_lineResult size mismatch");
+        if (@alignOf(HostStdout_lineResult) != 8) @compileError("HostStdout_lineResult alignment mismatch");
+        if (@offsetOf(HostStdout_lineResult, "tag") != 24) @compileError("HostStdout_lineResult tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(TryType6) != 16) @compileError("TryType6 size mismatch");
-        if (@alignOf(TryType6) != 4) @compileError("TryType6 alignment mismatch");
-        if (@offsetOf(TryType6, "tag") != 12) @compileError("TryType6 tag offset mismatch");
+        if (@sizeOf(HostStdout_lineResult) != 16) @compileError("HostStdout_lineResult size mismatch");
+        if (@alignOf(HostStdout_lineResult) != 4) @compileError("HostStdout_lineResult alignment mismatch");
+        if (@offsetOf(HostStdout_lineResult, "tag") != 12) @compileError("HostStdout_lineResult tag offset mismatch");
     }
 }
 
 /// Tag discriminant for Try.
-pub const TryType11Tag = enum(u8) {
+pub const TryType16Tag = enum(u8) {
     Err = 0,
     Ok = 1,
 };
 
 /// Payload union for Try.
-pub const TryType11Payload = extern union {
+pub const TryType16Payload = extern union {
         err: i32,
-        ok: void,
+        ok: [0]u8,
 };
 
 /// Tag union: Try
-pub const TryType11 = if (@sizeOf(usize) == 4) extern struct {
+pub const TryType16 = if (@sizeOf(usize) == 4) extern struct {
     payload: [4]u8 align(4),
-    tag: TryType11Tag,
+    tag: TryType16Tag,
     pub fn payload_err(self: *const @This()) i32 {
         const ptr: *const i32 = @ptrCast(@alignCast(&self.payload));
         return ptr.*;
     }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefTryType16(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfTryType16(self, amount);
+    }
 } else extern struct {
-    payload: TryType11Payload,
-    tag: TryType11Tag,
+    payload: TryType16Payload,
+    tag: TryType16Tag,
     pub fn payload_err(self: *const @This()) i32 {
         return self.payload.err;
+    }
+    /// Recursively decrement Roc-owned payloads.
+    pub fn decref(self: @This(), roc_host: *RocHost) void {
+        decrefTryType16(self, roc_host);
+    }
+
+    /// Increment Roc-owned payloads.
+    pub fn incref(self: @This(), amount: isize) void {
+        increfTryType16(self, amount);
     }
 };
 
 comptime {
     if (@sizeOf(usize) == 8) {
-        if (@sizeOf(TryType11) != 8) @compileError("TryType11 size mismatch");
-        if (@alignOf(TryType11) != 4) @compileError("TryType11 alignment mismatch");
-        if (@offsetOf(TryType11, "tag") != 4) @compileError("TryType11 tag offset mismatch");
+        if (@sizeOf(TryType16) != 8) @compileError("TryType16 size mismatch");
+        if (@alignOf(TryType16) != 4) @compileError("TryType16 alignment mismatch");
+        if (@offsetOf(TryType16, "tag") != 4) @compileError("TryType16 tag offset mismatch");
     }
     if (@sizeOf(usize) == 4) {
-        if (@sizeOf(TryType11) != 8) @compileError("TryType11 size mismatch");
-        if (@alignOf(TryType11) != 4) @compileError("TryType11 alignment mismatch");
-        if (@offsetOf(TryType11, "tag") != 4) @compileError("TryType11 tag offset mismatch");
+        if (@sizeOf(TryType16) != 8) @compileError("TryType16 size mismatch");
+        if (@alignOf(TryType16) != 4) @compileError("TryType16 alignment mismatch");
+        if (@offsetOf(TryType16, "tag") != 4) @compileError("TryType16 tag offset mismatch");
     }
 }
 
@@ -749,12 +958,9 @@ pub const HostStdout_lineArgs = extern struct {
     arg0: RocStr,
 };
 
-// =============================================================================
 // Generated Refcount Helpers
-// =============================================================================
 
-/// Recursively decrement Roc-owned payloads in TryType0.
-pub fn decrefTryType0(value: TryType0, roc_host: *RocHost) void {
+fn decrefHostStderr_lineResult(value: HostStderr_lineResult, roc_host: *RocHost) void {
     switch (value.tag) {
         .Err => {
         value.payload_err().decref(roc_host);
@@ -763,8 +969,7 @@ pub fn decrefTryType0(value: TryType0, roc_host: *RocHost) void {
     }
 }
 
-/// Increment Roc-owned payloads in TryType0.
-pub fn increfTryType0(value: TryType0, amount: isize) void {
+fn increfHostStderr_lineResult(value: HostStderr_lineResult, amount: isize) void {
     switch (value.tag) {
         .Err => {
         value.payload_err().incref(amount);
@@ -773,8 +978,13 @@ pub fn increfTryType0(value: TryType0, amount: isize) void {
     }
 }
 
-/// Recursively decrement Roc-owned payloads in TryType4.
-pub fn decrefTryType4(value: TryType4, roc_host: *RocHost) void {
+pub const HostStderr_lineResultRelease = struct {
+    pub fn release(value: HostStderr_lineResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefHostStdin_lineResult(value: HostStdin_lineResult, roc_host: *RocHost) void {
     switch (value.tag) {
         .Err => {
         value.payload_err().decref(roc_host);
@@ -785,8 +995,7 @@ pub fn decrefTryType4(value: TryType4, roc_host: *RocHost) void {
     }
 }
 
-/// Increment Roc-owned payloads in TryType4.
-pub fn increfTryType4(value: TryType4, amount: isize) void {
+fn increfHostStdin_lineResult(value: HostStdin_lineResult, amount: isize) void {
     switch (value.tag) {
         .Err => {
         value.payload_err().incref(amount);
@@ -797,8 +1006,13 @@ pub fn increfTryType4(value: TryType4, amount: isize) void {
     }
 }
 
-/// Recursively decrement Roc-owned payloads in TryType6.
-pub fn decrefTryType6(value: TryType6, roc_host: *RocHost) void {
+pub const HostStdin_lineResultRelease = struct {
+    pub fn release(value: HostStdin_lineResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefHostStdout_lineResult(value: HostStdout_lineResult, roc_host: *RocHost) void {
     switch (value.tag) {
         .Err => {
         value.payload_err().decref(roc_host);
@@ -807,8 +1021,7 @@ pub fn decrefTryType6(value: TryType6, roc_host: *RocHost) void {
     }
 }
 
-/// Increment Roc-owned payloads in TryType6.
-pub fn increfTryType6(value: TryType6, amount: isize) void {
+fn increfHostStdout_lineResult(value: HostStdout_lineResult, amount: isize) void {
     switch (value.tag) {
         .Err => {
         value.payload_err().incref(amount);
@@ -817,8 +1030,13 @@ pub fn increfTryType6(value: TryType6, amount: isize) void {
     }
 }
 
-/// Recursively decrement Roc-owned payloads in TryType11.
-pub fn decrefTryType11(value: TryType11, roc_host: *RocHost) void {
+pub const HostStdout_lineResultRelease = struct {
+    pub fn release(value: HostStdout_lineResult, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
+
+fn decrefTryType16(value: TryType16, roc_host: *RocHost) void {
     _ = roc_host;
     switch (value.tag) {
         .Err => {},
@@ -826,8 +1044,7 @@ pub fn decrefTryType11(value: TryType11, roc_host: *RocHost) void {
     }
 }
 
-/// Increment Roc-owned payloads in TryType11.
-pub fn increfTryType11(value: TryType11, amount: isize) void {
+fn increfTryType16(value: TryType16, amount: isize) void {
     _ = amount;
     switch (value.tag) {
         .Err => {},
@@ -835,12 +1052,34 @@ pub fn increfTryType11(value: TryType11, amount: isize) void {
     }
 }
 
+pub const TryType16Release = struct {
+    pub fn release(value: TryType16, roc_host: *RocHost) void {
+        value.decref(roc_host);
+    }
+};
 
-// =============================================================================
+/// Release one owned reference to a `RocList(RocStr)`.
+///
+/// The allocation's final reference is claimed atomically before any element
+/// is read, so concurrent owners cannot skip or duplicate element teardown.
+pub fn decrefListOfStr(value: RocList(RocStr), roc_host: *RocHost) void {
+    value.deinitWith(RocStrRelease, roc_host);
+}
+
+
+fn rocReleasePolicy(comptime T: type) type {
+    if (T == RocStr) return RocStrRelease;
+    if (T == HostStderr_lineResult) return HostStderr_lineResultRelease;
+    if (T == HostStdin_lineResult) return HostStdin_lineResultRelease;
+    if (T == HostStdout_lineResult) return HostStdout_lineResultRelease;
+    if (T == RocList(RocStr)) return RocListRelease(RocList(RocStr), RocStrRelease);
+    @compileError("generated glue has no recursive release policy for " ++ @typeName(T));
+}
+
+
 // Runtime Symbols
 //
 // The host defines these linker symbols. Compiled Roc code calls them directly.
-// =============================================================================
 
 pub extern fn roc_alloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque;
 pub extern fn roc_dealloc(ptr: *anyopaque, alignment: usize) callconv(.c) void;
@@ -849,24 +1088,31 @@ pub extern fn roc_dbg(bytes: [*]const u8, len: usize) callconv(.c) void;
 pub extern fn roc_expect_failed(bytes: [*]const u8, len: usize) callconv(.c) void;
 pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 
-// =============================================================================
 // Hosted Symbols
 //
 // The platform host must export these symbols with the exact direct C ABI signatures.
 // Refcounted arguments are owned by the hosted function.
-// =============================================================================
 
 /// Hosted symbol for Host.stderr_line!
 /// Roc signature: Str => Try({}, [StderrErr(Str)])
-pub extern fn roc_stderr_line(arg0: RocStr) callconv(.c) TryType0;
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_stderr_line(arg0: RocStr) callconv(.c) HostStderr_lineResult;
 
 /// Hosted symbol for Host.stdin_line!
 /// Roc signature: {} => Try(Str, [StdinErr(Str)])
-pub extern fn roc_stdin_line() callconv(.c) TryType4;
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_stdin_line() callconv(.c) HostStdin_lineResult;
 
 /// Hosted symbol for Host.stdout_line!
 /// Roc signature: Str => Try({}, [StdoutErr(Str)])
-pub extern fn roc_stdout_line(arg0: RocStr) callconv(.c) TryType6;
+/// Owned arguments. Release each exactly once before returning, unless it is
+/// moved into storage or into the result:
+///     arg0.decref(roc_host);
+/// The result is owned by Roc: return exactly one owned reference.
+pub extern fn roc_stdout_line(arg0: RocStr) callconv(.c) HostStdout_lineResult;
 
 
 /// Default memory management functions for Roc platforms.
@@ -1004,11 +1250,9 @@ pub fn makeRocHost(env: *RocEnv) RocHost {
     };
 }
 
-// =============================================================================
 // Provided Symbols
 //
 // Roc exports these symbols from the app with their natural C ABI signatures.
-// =============================================================================
 
 /// Entrypoint: main_for_host!
 pub extern fn roc_main(arg0: RocList(RocStr)) callconv(.c) i32;

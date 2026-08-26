@@ -44,48 +44,48 @@ fn main(argc: c_int, argv: [*][*:0]u8) callconv(.c) c_int {
     return platform_main(@intCast(argc), argv);
 }
 
-fn stderrLineOk() abi.TryType0 {
-    var result = std.mem.zeroes(abi.TryType0);
+fn stderrLineOk() abi.HostStderr_lineResult {
+    var result = std.mem.zeroes(abi.HostStderr_lineResult);
     result.tag = .Ok;
     return result;
 }
 
-fn stderrLineErr(err: anyerror, roc_host: *abi.RocHost) abi.TryType0 {
-    var result = std.mem.zeroes(abi.TryType0);
+fn stderrLineErr(err: anyerror, roc_host: *abi.RocHost) abi.HostStderr_lineResult {
+    var result = std.mem.zeroes(abi.HostStderr_lineResult);
     result.payload = .{ .err = abi.RocStr.fromSlice(@errorName(err), roc_host) };
     result.tag = .Err;
     return result;
 }
 
-fn stdinLineOk(line: abi.RocStr) abi.TryType4 {
-    var result = std.mem.zeroes(abi.TryType4);
+fn stdinLineOk(line: abi.RocStr) abi.HostStdin_lineResult {
+    var result = std.mem.zeroes(abi.HostStdin_lineResult);
     result.payload = .{ .ok = line };
     result.tag = .Ok;
     return result;
 }
 
-fn stdinLineErr(err: anyerror, roc_host: *abi.RocHost) abi.TryType4 {
-    var result = std.mem.zeroes(abi.TryType4);
+fn stdinLineErr(err: anyerror, roc_host: *abi.RocHost) abi.HostStdin_lineResult {
+    var result = std.mem.zeroes(abi.HostStdin_lineResult);
     result.payload = .{ .err = abi.RocStr.fromSlice(@errorName(err), roc_host) };
     result.tag = .Err;
     return result;
 }
 
-fn stdoutLineOk() abi.TryType6 {
-    var result = std.mem.zeroes(abi.TryType6);
+fn stdoutLineOk() abi.HostStdout_lineResult {
+    var result = std.mem.zeroes(abi.HostStdout_lineResult);
     result.tag = .Ok;
     return result;
 }
 
-fn stdoutLineErr(err: anyerror, roc_host: *abi.RocHost) abi.TryType6 {
-    var result = std.mem.zeroes(abi.TryType6);
+fn stdoutLineErr(err: anyerror, roc_host: *abi.RocHost) abi.HostStdout_lineResult {
+    var result = std.mem.zeroes(abi.HostStdout_lineResult);
     result.payload = .{ .err = abi.RocStr.fromSlice(@errorName(err), roc_host) };
     result.tag = .Err;
     return result;
 }
 
 /// Hosted function: Host.stderr_line!
-fn hostedStderrLine(str: abi.RocStr) callconv(.c) abi.TryType0 {
+fn hostedStderrLine(str: abi.RocStr) callconv(.c) abi.HostStderr_lineResult {
     const roc_host = g_roc_host.?;
     var owned = str;
     defer owned.decref(roc_host);
@@ -99,7 +99,7 @@ fn hostedStderrLine(str: abi.RocStr) callconv(.c) abi.TryType0 {
 }
 
 /// Hosted function: Host.stdin_line!
-fn hostedStdinLine() callconv(.c) abi.TryType4 {
+fn hostedStdinLine() callconv(.c) abi.HostStdin_lineResult {
     const roc_host = g_roc_host.?;
     const roc_env: *abi.RocEnv = @ptrCast(@alignCast(roc_host.env));
     const host: *HostEnv = @fieldParentPtr("roc_env", roc_env);
@@ -134,7 +134,7 @@ fn hostedStdinLine() callconv(.c) abi.TryType4 {
 }
 
 /// Hosted function: Host.stdout_line!
-fn hostedStdoutLine(str: abi.RocStr) callconv(.c) abi.TryType6 {
+fn hostedStdoutLine(str: abi.RocStr) callconv(.c) abi.HostStdout_lineResult {
     const roc_host = g_roc_host.?;
     var owned = str;
     defer owned.decref(roc_host);
