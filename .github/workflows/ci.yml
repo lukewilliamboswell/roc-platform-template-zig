@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build:
-    name: zig build (${{ matrix.os }})
+    name: Current source (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -43,7 +43,9 @@ jobs:
           use-cache: false
 
       - name: Read pinned Roc version
-        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+        run: |
+          PIN=$(python3 scripts/roc_version.py)
+          echo "ROC_NIGHTLY_TAG=$PIN" >> "$GITHUB_ENV"
 
       - name: Install Roc nightly
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
@@ -56,3 +58,45 @@ jobs:
         with:
           command: bash ci/all_tests.sh
           error_string_contains: "build.zig.zon"
+
+  published-examples:
+    name: Published examples (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-15-intel
+          - macos-15
+          - ubuntu-22.04
+          - ubuntu-24.04-arm
+          - windows-2022
+          - windows-2025
+          # TODO: re-enable windows-11-arm after https://codeberg.org/ziglang/zig/issues/31865 is fixed.
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # ratchet:mlugg/setup-zig@v2.2.1
+        with:
+          version: 0.16.0
+          use-cache: false
+
+      - name: Read pinned Roc version
+        run: |
+          PIN=$(python3 scripts/roc_version.py)
+          echo "ROC_NIGHTLY_TAG=$PIN" >> "$GITHUB_ENV"
+
+      - name: Install Roc nightly
+        uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
+
+      - name: Test committed release URLs with a fresh cache
+        run: python3 scripts/test_published_examples.py

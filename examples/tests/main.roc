@@ -1,14 +1,14 @@
-app [main!] { pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst" }
+app [main!] { roc: "nightly-2026-08-26-b29bef3", pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst" }
 
 import pf.Stdout
 
 # Demonstrates: expect keyword for testing
-# Run with: roc test examples/tests.roc
+# Run with: roc test examples/tests/main.roc
 # NOTE: Type annotations on helper functions cause compiler panic
 
 main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
 main! = |_args| {
-    Stdout.line!("Run 'roc test --verbose examples/tests.roc' to execute the tests")?
+    Stdout.line!("Run 'roc test --verbose examples/tests/main.roc' to execute the tests")?
     Ok({})
 }
 

@@ -7,7 +7,7 @@
   },
   "apps": [
     {
-      "path": "examples/cli_args.roc",
+      "path": "examples/cli_args/main.roc",
       "cases": [
         {
           "name": "no-extra-arguments",
@@ -21,7 +21,7 @@
       ]
     },
     {
-      "path": "examples/hello_world.roc",
+      "path": "examples/hello_world/main.roc",
       "cases": [
         {
           "name": "happy",
@@ -30,7 +30,7 @@
       ]
     },
     {
-      "path": "examples/fizzbuzz.roc",
+      "path": "examples/fizzbuzz/main.roc",
       "cases": [
         {
           "name": "happy",
@@ -39,7 +39,7 @@
       ]
     },
     {
-      "path": "examples/match.roc",
+      "path": "examples/match/main.roc",
       "cases": [
         {
           "name": "no-extra-arguments",
@@ -59,7 +59,7 @@
       ]
     },
     {
-      "path": "examples/stderr.roc",
+      "path": "examples/stderr/main.roc",
       "cases": [
         {
           "name": "separate-streams",
@@ -69,7 +69,7 @@
       ]
     },
     {
-      "path": "examples/sum_fold.roc",
+      "path": "examples/sum_fold/main.roc",
       "cases": [
         {
           "name": "happy",
@@ -81,7 +81,7 @@
       ]
     },
     {
-      "path": "examples/exit.roc",
+      "path": "examples/exit/main.roc",
       "cases": [
         {
           "name": "explicit-exit",
@@ -96,7 +96,7 @@
       ]
     },
     {
-      "path": "examples/echo.roc",
+      "path": "examples/echo/main.roc",
       "cases": [
         {
           "name": "one-line",
@@ -116,7 +116,7 @@
       ]
     },
     {
-      "path": "examples/echo_multiline.roc",
+      "path": "examples/echo_multiline/main.roc",
       "cases": [
         {
           "name": "multiple-lines",
@@ -129,17 +129,17 @@
       ]
     },
     {
-      "path": "examples/tests.roc",
+      "path": "examples/tests/main.roc",
       "stages": { "test": true },
       "cases": [
         {
           "name": "happy",
-          "stdout_contains": ["Run 'roc test --verbose examples/tests.roc'"]
+          "stdout_contains": ["Run 'roc test --verbose examples/tests/main.roc'"]
         }
       ]
     },
     {
-      "path": "examples/dbg_test.roc",
+      "path": "examples/dbg_test/main.roc",
       "build_args": ["--opt=dev"],
       "cases": [
         {
@@ -150,7 +150,7 @@
       ]
     },
     {
-      "path": "examples/all_roc_syntax.roc",
+      "path": "examples/all_roc_syntax/main.roc",
       "stages": { "test": true },
       "cases": [
         {

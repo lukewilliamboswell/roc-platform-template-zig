@@ -9,7 +9,7 @@ on:
         required: false
         default: false
       release_tag:
-        description: 'Release tag (e.g., v0.1.0)'
+        description: 'New package version (e.g., 1.1.0)'
         required: false
         type: string
   pull_request:
@@ -17,7 +17,7 @@ on:
 # Ensure only one release workflow runs at a time
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -28,6 +28,9 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       bundle_filename: ${{ steps.bundle.outputs.bundle_filename }}
+      compiler_pin: ${{ steps.compiler.outputs.pin }}
+      compiler_channel: ${{ steps.release-policy.outputs.compiler-channel }}
+      source_sha: ${{ github.sha }}
     defaults:
       run:
         shell: bash
@@ -43,6 +46,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Check release compiler policy
+        if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation
+        id: release-policy
+        uses: lukewilliamboswell/roc-automation/actions/check-release@b60d561cbd53c911b29238b30624827f8487113a
+        with:
+          version: ${{ inputs.release_tag }}
+          compiler-root: platform/main.roc
+          allow-default-branch: 'true'
+          # Temporary bootstrap policy; remove when adopting a stable compiler.
+          allow-nightly-bootstrap: 'true'
+
+      - name: Reject an existing release tag
+        if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.release_tag }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_VERSION" > existing-tags.json
+          python3 - <<'PYCODE'
+          import json, os
+          refs = json.load(open("existing-tags.json"))
+          if any(ref["ref"] == "refs/tags/" + os.environ["RELEASE_VERSION"] for ref in refs):
+              raise SystemExit("Release tag already exists; inspect the prior release before recovery")
+          PYCODE
+
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
@@ -50,13 +78,20 @@ jobs:
           use-cache: false
 
       - name: Read pinned Roc version
-        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+        id: compiler
+        run: |
+          PIN=$(python3 scripts/roc_version.py)
+          echo "ROC_NIGHTLY_TAG=$PIN" >> "$GITHUB_ENV"
+          echo "pin=$PIN" >> "$GITHUB_OUTPUT"
 
       - name: Install Roc nightly
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
         with:
           version: nightly-new-compiler
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
+
+      - name: Validate current source
+        run: bash ci/all_tests.sh
 
       - name: Build platform with ReleaseSafe
         run: zig build -Doptimize=ReleaseSafe
@@ -119,7 +154,9 @@ jobs:
           use-cache: false
 
       - name: Read pinned Roc version
-        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+        run: |
+          PIN=$(python3 scripts/roc_version.py)
+          echo "ROC_NIGHTLY_TAG=$PIN" >> "$GITHUB_ENV"
 
       - name: Install Roc nightly
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
@@ -147,7 +184,9 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Read pinned Roc version
-        run: printf 'ROC_NIGHTLY_TAG=%s\n' "$(sed -n '1p' .roc-version)" >> "$GITHUB_ENV"
+        run: |
+          PIN=$(python3 scripts/roc_version.py)
+          echo "ROC_NIGHTLY_TAG=$PIN" >> "$GITHUB_ENV"
 
       - name: Install Roc nightly
         uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
@@ -168,7 +207,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-and-bundle, test-bundle]
+    needs: [build-and-bundle, test-bundle, build-docs]
     runs-on: ubuntu-24.04
     # Only run on manual trigger
     if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
@@ -187,23 +226,33 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ needs.build-and-bundle.outputs.source_sha }}
+          BUNDLE_FILE: ${{ needs.build-and-bundle.outputs.bundle_filename }}
+          COMPILER_PIN: ${{ needs.build-and-bundle.outputs.compiler_pin }}
+          COMPILER_CHANNEL: ${{ needs.build-and-bundle.outputs.compiler_channel }}
         run: |
-          BUNDLE_FILE=$(ls *.tar.zst | head -1)
-
-          if [ -z "$BUNDLE_FILE" ]; then
-            echo "Error: No bundle file found"
-            exit 1
-          fi
-
-          # Create release with auto-generated notes
-          gh release create "${{ github.event.inputs.release_tag }}" \
-            "$BUNDLE_FILE" \
-            --title "${{ github.event.inputs.release_tag }}" \
-            --generate-notes \
-            --notes "Platform bundle built with Zig 0.16.0 and Roc nightly"
-
-          echo "Release created: ${{ github.event.inputs.release_tag }}"
-          echo "Bundle uploaded: $BUNDLE_FILE"
+          test -f "$BUNDLE_FILE"
+          sha256sum "$BUNDLE_FILE" > SHA256SUMS
+          python3 - <<'PYCODE'
+          import os
+          from pathlib import Path
+          env = os.environ
+          url = f"https://github.com/{env['GITHUB_REPOSITORY']}/releases/download/{env['RELEASE_VERSION']}/{env['BUNDLE_FILE']}"
+          Path("release-notes.md").write_text(
+              f"Platform built with Zig 0.16.0 and Roc `{env['COMPILER_PIN']}`.\n\n"
+              f"Compiler policy: `{env['COMPILER_CHANNEL']}` (exact nightly bootstrap; no stable compiler support claim).\n\n"
+              f"Tested source: `{env['SOURCE_SHA']}`.\n\n"
+              f"Platform bundle: {url}\n\n"
+              "SHA-256 digest is attached in SHA256SUMS.\n"
+          )
+          PYCODE
+          # Creating a new ref fails if another publisher claimed this tag.
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f "ref=refs/tags/$RELEASE_VERSION" -f "sha=$SOURCE_SHA"
+          gh release create "$RELEASE_VERSION" "$BUNDLE_FILE" SHA256SUMS \
+            --verify-tag --title "$RELEASE_VERSION" \
+            --generate-notes --notes-file release-notes.md
 
   deploy-docs:
     name: Deploy Docs to GitHub Pages

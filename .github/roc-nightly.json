@@ -2,5 +2,21 @@
   "workflows": [
     "ci.yml",
     "release.yml"
-  ]
+  ],
+  "compiler_roots": [
+    "platform/main.roc",
+    "examples/all_roc_syntax/main.roc",
+    "examples/cli_args/main.roc",
+    "examples/dbg_test/main.roc",
+    "examples/echo/main.roc",
+    "examples/echo_multiline/main.roc",
+    "examples/exit/main.roc",
+    "examples/fizzbuzz/main.roc",
+    "examples/hello_world/main.roc",
+    "examples/match/main.roc",
+    "examples/stderr/main.roc",
+    "examples/sum_fold/main.roc",
+    "examples/tests/main.roc"
+  ],
+  "auto_merge": false
 }
