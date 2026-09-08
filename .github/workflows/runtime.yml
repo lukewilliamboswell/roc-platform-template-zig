@@ -1,0 +1,149 @@
+name: Runtime release
+
+on:
+  pull_request:
+    paths:
+      - 'runtime/**'
+      - 'scripts/*runtime*.py'
+      - '.github/workflows/runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build runtime (${{ matrix.copy }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        copy: [1, 2]
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install upstream signature verifier
+        run: |
+          PACKAGE=$(python3 -c 'import json; print(json.load(open("runtime/sources.json"))["objcopy"]["package"])')
+          sudo apt-get update
+          sudo apt-get install -y minisign "$PACKAGE"
+      - name: Test runtime tooling
+        run: python3 -m unittest discover -s scripts -p 'test_runtime_tools.py' -v
+      - name: Build from verified sources
+        run: python3 scripts/build_runtime.py build --output .zig-cache/runtime-dist
+      - name: Read release version
+        id: metadata
+        run: |
+          VERSION=$(python3 -c 'import json; print(json.load(open("runtime/sources.json"))["runtime_version"])')
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runtime-${{ matrix.copy }}
+          path: .zig-cache/runtime-dist/*
+          if-no-files-found: error
+
+  reproducibility:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: runtime-*
+      - name: Compare independent builds
+        run: diff -r runtime-1 runtime-2
+
+  test:
+    name: Test runtime (${{ matrix.os }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: runtime-1
+          path: .zig-cache/runtime-dist
+      - name: Install upstream signature verifier
+        run: |
+          PACKAGE=$(python3 -c 'import json; print(json.load(open("runtime/sources.json"))["objcopy"]["package"])')
+          sudo apt-get update
+          sudo apt-get install -y minisign "$PACKAGE"
+      - name: Test startup and libc without implicit runtime libraries
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: python3 scripts/build_runtime.py smoke ".zig-cache/runtime-dist/roc-runtime-$VERSION.tar.gz"
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+          use-cache: false
+      - name: Read compiler requirement
+        run: |
+          PIN=$(python3 scripts/roc_version.py)
+          echo "ROC_NIGHTLY_TAG=$PIN" >> "$GITHUB_ENV"
+      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
+      - name: Test Roc platform with candidate runtime and baseline CPU targets
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: python3 scripts/test_runtime_platform.py ".zig-cache/runtime-dist/roc-runtime-$VERSION.tar.gz"
+
+  publish:
+    needs: [build, reproducibility, test]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # Never check out or execute the built source in the signing job.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: runtime-1
+          path: dist
+      - name: Check artifact integrity
+        working-directory: dist
+        run: sha256sum -c SHA256SUMS
+      - name: Attest build provenance
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/roc-runtime-${{ env.VERSION }}.tar.gz
+      - name: Attest SBOM
+        id: sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/roc-runtime-${{ env.VERSION }}.tar.gz
+          sbom-path: dist/runtime.spdx.json
+      - name: Publish immutable runtime release
+        env:
+          PROVENANCE: ${{ steps.provenance.outputs.bundle-path }}
+          SBOM_ATTESTATION: ${{ steps.sbom.outputs.bundle-path }}
+        run: |
+          cp "$PROVENANCE" dist/provenance.sigstore.json
+          cp "$SBOM_ATTESTATION" dist/sbom.sigstore.json
+          TAG="runtime-$VERSION"
+          # Creating a ref fails if that version has already been used.
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$GITHUB_SHA"
+          printf 'Linux runtime %s built from verified Zig 0.16.0 sources.\n\nProducer commit: %s\n\nSee runtime.spdx.json, SHA256SUMS and the attached Sigstore bundles.\n' "$VERSION" "$GITHUB_SHA" > notes.md
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --draft --verify-tag --latest=false --title "Runtime $VERSION" --notes-file notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isImmutable --jq '.isImmutable' | grep -qx true
