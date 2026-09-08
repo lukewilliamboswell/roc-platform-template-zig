@@ -30,7 +30,10 @@ jobs:
         with:
           persist-credentials: false
       - name: Install upstream signature verifier
-        run: sudo apt-get update && sudo apt-get install -y minisign
+        run: |
+          PACKAGE=$(python3 -c 'import json; print(json.load(open("runtime/sources.json"))["objcopy"]["package"])')
+          sudo apt-get update
+          sudo apt-get install -y minisign "$PACKAGE"
       - name: Test runtime tooling
         run: python3 -m unittest discover -s scripts -p 'test_runtime_tools.py' -v
       - name: Build from verified sources
@@ -74,7 +77,10 @@ jobs:
           name: runtime-1
           path: .zig-cache/runtime-dist
       - name: Install upstream signature verifier
-        run: sudo apt-get update && sudo apt-get install -y minisign
+        run: |
+          PACKAGE=$(python3 -c 'import json; print(json.load(open("runtime/sources.json"))["objcopy"]["package"])')
+          sudo apt-get update
+          sudo apt-get install -y minisign "$PACKAGE"
       - name: Test startup and libc without implicit runtime libraries
         env:
           VERSION: ${{ needs.build.outputs.version }}

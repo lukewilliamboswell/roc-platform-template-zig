@@ -77,7 +77,7 @@ def normalize_archive(zig: Path, source: Path, destination: Path, work: Path):
         obj = work / f"{index:04d}.o"
         obj.write_bytes(subprocess.check_output([zig, "ar", "pP", source, member]))
         stripped = work / f"stripped-{index:04d}.o"
-        run([zig, "objcopy", "--strip-debug", obj, stripped])
+        run(["llvm-objcopy-18", "--strip-debug", obj, stripped])
         objects.append(stripped)
     run([zig, "ar", "rcsD", destination, *objects])
 
@@ -99,12 +99,18 @@ def sbom(stage: Path, manifest: dict, archive: Path, epoch: int) -> dict:
     compiler = manifest["sources"]["toolchains"][manifest["builder_platform"]]
     packages[-1]["downloadLocation"] = compiler["url"]
     packages[-1]["checksums"] = [{"algorithm": "SHA256", "checksumValue": compiler["sha256"]}]
+    packages.append({"SPDXID": "SPDXRef-objcopy", "name": "LLVM objcopy",
+                     "versionInfo": manifest["sources"]["objcopy"]["version"],
+                     "downloadLocation": manifest["sources"]["objcopy"]["source"],
+                     "filesAnalyzed": False, "licenseConcluded": "NOASSERTION",
+                     "licenseDeclared": "Apache-2.0 WITH LLVM-exception", "copyrightText": "NOASSERTION"})
     packages[0]["checksums"] = [{"algorithm": "SHA256", "checksumValue": digest(archive)}]
     files, relationships = [], [{"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-runtime"}]
     for ident in ("musl", "zig-libc", "compiler-rt"):
         relationships.append({"spdxElementId": "SPDXRef-runtime", "relationshipType": "DEPENDS_ON", "relatedSpdxElement": f"SPDXRef-{ident}"})
     relationships.append({"spdxElementId": "SPDXRef-zig", "relationshipType": "BUILD_TOOL_OF", "relatedSpdxElement": "SPDXRef-runtime"})
     inventory = {**manifest["files"], "manifest.json": digest(stage / "manifest.json")}
+    relationships.append({"spdxElementId": "SPDXRef-objcopy", "relationshipType": "BUILD_TOOL_OF", "relatedSpdxElement": "SPDXRef-runtime"})
     for index, (name, sha) in enumerate(sorted(inventory.items())):
         ident = f"SPDXRef-file-{index}"
         files.append({"SPDXID": ident, "fileName": "./" + name,
@@ -121,6 +127,9 @@ def sbom(stage: Path, manifest: dict, archive: Path, epoch: int) -> dict:
 
 def build(output: Path):
     lock = json.loads(SOURCES.read_text())
+    version = subprocess.check_output([lock["objcopy"]["command"], "--version"], text=True)
+    if lock["objcopy"]["version"] not in version:
+        raise ValueError("Unexpected llvm-objcopy version")
     output.mkdir(parents=True, exist_ok=False)
     cache_root = ROOT / ".zig-cache"
     cache_root.mkdir(exist_ok=True)
@@ -145,7 +154,7 @@ def build(output: Path):
                     objects.mkdir()
                     normalize_archive(zig, source, target_out / filename, objects)
                 else:
-                    run([zig, "objcopy", "--strip-debug", source, target_out / filename])
+                    run(["llvm-objcopy-18", "--strip-debug", source, target_out / filename])
         (stage / "licenses").mkdir()
         shutil.copyfile(zig.parent / "LICENSE", stage / "licenses/Zig.txt")
         shutil.copyfile(zig.parent / "lib/libc/musl/COPYRIGHT", stage / "licenses/musl.txt")

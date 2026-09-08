@@ -4,11 +4,11 @@
 Minisign key. The producer verifies both before executing Zig and compiling its
 bundled musl, Zig libc and compiler runtime. This does not bootstrap Zig itself.
 
-The archive contains baseline x86-64 and ARM64 Linux runtime files, a per-file
+The archive strips build-path-bearing debug data with LLVM objcopy and contains baseline x86-64 and ARM64 Linux runtime files, a per-file
 manifest, and license notices. Zig 0.16.0 supplies musl 1.2.5 with Zig-specific
 changes; the SBOM does not describe this as unmodified upstream musl.
 
-To reproduce on Linux, install Python 3.10+ and Minisign, then run:
+To reproduce on Linux, install Python 3.10+, Minisign and LLVM 18.1.3 (`llvm-objcopy-18`), then run:
 
 ```sh
 python3 scripts/build_runtime.py build --output .zig-cache/runtime-dist
