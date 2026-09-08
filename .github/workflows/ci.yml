@@ -115,3 +115,20 @@ jobs:
 
       - name: Test committed release URLs with a fresh cache
         run: python3 scripts/test_published_examples.py
+
+  ci-required:
+    name: CI required
+    if: always()
+    needs: [tooling, build, published-examples]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every validation lane to pass
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          python3 - <<'PYCODE'
+          import json, os
+          results = json.loads(os.environ["RESULTS"])
+          if len(results) != 3 or any(result != "success" for result in results):
+              raise SystemExit(f"Required validation failed: {results}")
+          PYCODE
