@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "runtime_version": "1.0.0",
+  "zig_version": "0.16.0",
+  "musl_version": "1.2.5",
+  "zig_minisign_key": "RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U",
+  "toolchains": {
+    "x86_64-linux": {
+      "url": "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz",
+      "sha256": "70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"
+    },
+    "aarch64-linux": {
+      "url": "https://ziglang.org/download/0.16.0/zig-aarch64-linux-0.16.0.tar.xz",
+      "sha256": "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17"
+    }
+  },
+  "targets": {
+    "x64musl": "x86_64-linux-musl",
+    "arm64musl": "aarch64-linux-musl"
+  },
+  "cpu": "baseline",
+  "optimization": "-O2"
+}
