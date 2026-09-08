@@ -14,13 +14,13 @@ python3 - "$examples_out" <<'PY'
 from pathlib import Path
 import os
 import re
+import shutil
 import sys
 
 examples_out = Path(sys.argv[1])
 source_dir = Path("examples")
 platform_path = Path("platform/main.roc").resolve()
-replacement_path = os.path.relpath(platform_path, examples_out.resolve())
-replacement = f'platform "{Path(replacement_path).as_posix()}"'
+shutil.copytree(source_dir, examples_out, dirs_exist_ok=True)
 
 platform_pattern = re.compile(
     r'platform "(?:'
@@ -30,12 +30,15 @@ platform_pattern = re.compile(
 )
 
 rewritten = 0
-for source in sorted(source_dir.glob("*.roc")):
+for source in sorted(source_dir.glob("*/main.roc")):
+    destination = examples_out / source.relative_to(source_dir)
+    replacement_path = os.path.relpath(platform_path, destination.parent.resolve())
+    replacement = f'platform "{Path(replacement_path).as_posix()}"'
     text = source.read_text(encoding="utf-8")
     updated, count = platform_pattern.subn(replacement, text, count=1)
     if count != 1:
         raise SystemExit(f"example does not use a recognized platform URL: {source}")
-    (examples_out / source.name).write_text(updated, encoding="utf-8")
+    destination.write_text(updated, encoding="utf-8")
     rewritten += 1
 
 if rewritten == 0:

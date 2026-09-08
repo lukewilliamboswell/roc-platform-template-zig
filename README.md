@@ -10,19 +10,25 @@ A template for building [Roc platforms](https://www.roc-lang.org/platforms) usin
 ## Requirements
 
 - [Zig](https://ziglang.org/download/) 0.16.0 or later
-- [Roc](https://www.roc-lang.org/) (for bundling)
+- [Roc](https://github.com/roc-lang/nightlies/releases): install the exact nightly named by the `roc` field in the application header. The platform header declares the development compiler.
 
 ## Examples
 
-Use the current release bundle as the platform dependency:
+The examples use [platform release 1.0.0](https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/tag/1.0.0), tested with the compiler declared in each header. Install that compiler, then run an example directly:
 
-```roc
-app [main!] { pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst" }
+```bash
+roc version
+roc examples/hello_world/main.roc
+# Hello, World!
+
+printf 'Ada\n' | roc examples/echo/main.roc
 ```
 
-Run examples with interpreter: `roc examples/<name>.roc`
+Each folder in `examples/` is a complete application. Copy the whole folder,
+including its pinned compiler and immutable platform URL. The header declares a
+compiler requirement; it does not install or select the executable.
 
-Build standalone executable: `roc build examples/<name>.roc`
+Build a standalone executable: `roc build examples/hello_world/main.roc`.
 
 ## Documentation
 
@@ -36,7 +42,7 @@ zig build docs
 
 ## Testing
 
-The checked-in examples use the latest release bundle so they can be copied directly. `zig build test` rewrites temporary copies to use the local `platform/main.roc` before running them.
+The checked-in examples pin a published release bundle so they can be copied directly. `zig build test` rewrites temporary copies to use the local `platform/main.roc` before running them.
 
 [`scripts/test_spec.json`](scripts/test_spec.json) is the source of truth for example coverage. Every example has one entry and can define any number of named cases. A case can provide command-line arguments, stdin, environment variables, an expected exit code, and combined or stream-specific output assertions. The runner builds each example once and reuses that binary for all of its cases on Linux, macOS, and Windows.
 
@@ -48,7 +54,7 @@ All test stages passed (check: 12, test: 2, build: 12, run: 17)
 Run the spec directly against another examples directory or only selected stages:
 
 ```bash
-python3 scripts/test.py --examples-dir examples
+python3 scripts/test_published_examples.py  # committed URLs, fresh cache
 python3 scripts/test.py --operation validate
 python3 scripts/test.py --operation run
 ```
@@ -95,3 +101,20 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 | arm64v1musl | `platform/targets/arm64v1musl/libhost.a` |
 
 Linux musl targets include statically linked C runtime files (`crt1.o`, `libc.a`) for standalone executables. The `v1` targets use each architecture's baseline instruction set for CPUs without the features required by the default targets.
+
+## Maintenance and releases
+
+`main` tracks an exact nightly. The updater advances the platform and all public
+example compiler headers together, preserving released platform URLs. CI has
+separate **Published examples** and **Current source** jobs; release validation
+also tests the exact proposed archive. A compiler update must pass all three.
+Automatic merging is disabled; compiler compatibility failures need review.
+
+Publication currently uses the explicit exact-nightly bootstrap policy, with no
+stable compiler or LTS promise. Package versions are independent of compiler
+versions. The release workflow checks that policy, rejects existing tags, tests
+source and bundles, and publishes the tested commit with its compiler requirement
+and SHA-256 digest. Nightly validation cannot publish or deploy.
+
+See [the maintainer procedure](ci/MAINTAINING.md) for release follow-ups and the
+remaining live rollout checks.

@@ -5,7 +5,8 @@ root_dir="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root_dir"
 
 bundle_arg="${1:-}"
-work_dir=".bundle-url-test"
+mkdir -p .zig-cache
+work_dir="$(mktemp -d .zig-cache/bundle-url-test.XXXXXX)"
 server_pid=""
 
 cleanup() {
@@ -101,28 +102,21 @@ echo "Testing examples against bundled platform: $bundle_url"
 
 python3 - "$bundle_url" "$work_dir/examples" <<'PY'
 from pathlib import Path
+import re
+import shutil
 import sys
 
 bundle_url, out_dir = sys.argv[1], Path(sys.argv[2])
 source_dir = Path("examples")
-replacement = f'platform "{bundle_url}"'
-needles = [
-    'platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst"',
-    'platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/0.9/8GdFEvQYS3TeAZxKvTzCLVdQiomweGtXcdZkXNDEeABq.tar.zst"',
-    'platform "../platform/main.roc"',
-]
-
+shutil.copytree(source_dir, out_dir, dirs_exist_ok=True)
+pattern = re.compile(r'platform "https://github\.com/lukewilliamboswell/roc-platform-template-zig/releases/download/[^"\n]+"')
 rewritten = 0
-for source in sorted(source_dir.glob("*.roc")):
-    text = source.read_text(encoding="utf-8")
-    for needle in needles:
-        if needle in text:
-            (out_dir / source.name).write_text(text.replace(needle, replacement), encoding="utf-8")
-            break
-    else:
+for source in sorted(source_dir.glob("*/main.roc")):
+    text, count = pattern.subn(lambda _: f'platform "{bundle_url}"', source.read_text(), count=1)
+    if count != 1:
         raise SystemExit(f"example does not use a recognized platform URL: {source}")
+    (out_dir / source.relative_to(source_dir)).write_text(text, encoding="utf-8")
     rewritten += 1
-
 if rewritten == 0:
     raise SystemExit("no examples found to test")
 PY

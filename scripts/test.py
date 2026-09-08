@@ -127,7 +127,7 @@ def load_spec(examples_dir: Path) -> tuple[dict[str, bool], list[dict[str, objec
 
     discovered = {
         (Path("examples") / path.relative_to(examples_dir)).as_posix()
-        for path in examples_dir.rglob("*.roc")
+        for path in examples_dir.glob("*/main.roc")
     }
     specified = set(paths)
     if discovered != specified:
@@ -360,11 +360,11 @@ def run_suite(
                 if stage == "check":
                     result = run_process(["roc", "check", str(source), "--no-cache"])
                     require_success(result, f"check {source}", verbose=verbose)
-                    print(f"PASS check: {source.name}")
+                    print(f"PASS check: {app['path']}")
                 elif stage == "test":
                     result = run_process(["roc", "test", str(source), "--no-cache"])
                     require_success(result, f"test {source}", verbose=verbose)
-                    print(f"PASS test: {source.name}")
+                    print(f"PASS test: {app['path']}")
                 elif stage == "build":
                     relative = Path(str(app["path"])).relative_to("examples")
                     suffix = ".exe" if os.name == "nt" else ""
@@ -384,7 +384,7 @@ def run_suite(
                     )
                     require_success(result, f"build {source}", verbose=verbose)
                     binaries[str(app["path"])] = binary
-                    print(f"PASS build: {source.name}")
+                    print(f"PASS build: {app['path']}")
                 else:
                     binary = binaries.get(str(app["path"]))
                     if binary is None:
