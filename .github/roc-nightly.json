@@ -18,5 +18,5 @@
     "examples/sum_fold/main.roc",
     "examples/tests/main.roc"
   ],
-  "auto_merge": false
+  "auto_merge": true
 }

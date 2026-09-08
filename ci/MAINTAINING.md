@@ -58,15 +58,21 @@ The September 7 updater failed at PR creation, before compiler validation:
 [failed run](https://github.com/lukewilliamboswell/roc-platform-template-zig/actions/runs/34151289741).
 Actions PR creation was disabled. The combined GitHub setting for creating and
 approving PRs has now been enabled; default token permissions remain read-only.
-The controller never approves its own PRs, and `auto_merge` is explicitly false.
-The repository currently allows all Actions and has no effective rules on `main`.
+The controller never approves its own PRs. `auto_merge` is enabled for signed,
+compiler-pin-only candidates after both configured validation workflows pass.
+The active `main` ruleset requires PRs, up-to-date `CI required` and `Bundle required`
+checks from GitHub Actions, verified signatures, and protects against deletion and
+force pushes. It has no bypass actors and requires zero human approvals so nightly
+updates can merge unattended. This review-count policy applies to all PRs; source
+and workflow changes still require maintainer review as project policy.
 
-After merging these changes, manually dispatch Update Roc nightly. Verify the
-signed candidate commit, both CI lanes and release archive jobs against that SHA.
-Then exercise a no-op and retain failure evidence showing unsuccessful updates
-remain unmerged. These live trials have not been completed by local validation.
-
-Before enabling automatic merging, install and verify strict required-check and
-PR rules with no bot bypass, following the shared integration guide. Select real
-check names from successful runs. Do not infer protected-merge acceptance from a
-successful dispatch or enable automatic merging merely to report statuses.
+Both aggregate jobs run even after a dependency fails or is skipped and accept only
+success from every lane. The controller mirrors their actual candidate results to
+required statuses, then rechecks the base, head, signatures, and pin-only diff before
+an immediate squash merge. Failed updates stay open. Set `auto_merge` to false to
+stop automatic merging; disable the updater workflow for an immediate stop.
+The repository allows all Actions; workflow dependencies remain pinned to reviewed
+full commit SHAs. After changing this setup, manually dispatch Update Roc nightly
+and verify the signed candidate, both configured workflow runs, and bot merge.
+Repeat the dispatch to check the no-op path. Never infer protected-merge acceptance
+from a successful validation dispatch alone.
