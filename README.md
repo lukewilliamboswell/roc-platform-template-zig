@@ -61,7 +61,13 @@ python3 scripts/test.py --operation run
 
 ## Building
 
+For a fresh checkout, install Python 3.10+ and GitHub CLI 2.98+, then fetch the
+pinned runtime once. This verifies its hashes, provenance and SBOM attestations;
+subsequent builds work offline.
+
 ```bash
+python3 scripts/runtime.py fetch
+
 # Build for all supported targets (cross-compilation)
 zig build -Doptimize=ReleaseSafe
 
@@ -100,7 +106,7 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 | arm64musl | `platform/targets/arm64musl/libhost.a` |
 | arm64v1musl | `platform/targets/arm64v1musl/libhost.a` |
 
-Linux musl targets include statically linked C runtime files (`crt1.o`, `libc.a`) for standalone executables. The `v1` targets use each architecture's baseline instruction set for CPUs without the features required by the default targets.
+Linux musl targets include verified runtime files (`crt1.o`, `libc.a`, `libzigc.a`, `libcompiler_rt.a`) for standalone executables. The `v1` targets use each architecture's baseline instruction set for CPUs without the features required by the default targets.
 
 ## Maintenance and releases
 
@@ -118,3 +124,5 @@ and SHA-256 digest. Nightly validation cannot publish or deploy.
 
 See [the maintainer procedure](ci/MAINTAINING.md) for release follow-ups and the
 remaining live rollout checks.
+
+Runtime sources, independent releases and verification are described in [runtime/README.md](runtime/README.md).

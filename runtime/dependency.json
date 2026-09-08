@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "repository": "lukewilliamboswell/roc-platform-template-zig",
+  "tag": "runtime-1.0.0",
+  "url": "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/runtime-1.0.0/roc-runtime-1.0.0.tar.gz",
+  "sha256": "24419d746351a61ed73f7f97b70f73568268a9da796ce8bb8ef74b0019e8f8e9",
+  "sbom_sha256": "d7aae9f81ef2682ff4567746faef109b258af2d951a384ede431c87a010f9d25",
+  "source_commit": "f47d4eb9c932877f8b9c5363a4891101031a8eb0",
+  "workflow": ".github/workflows/runtime.yml",
+  "source_ref": "refs/heads/main"
+}

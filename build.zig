@@ -65,14 +65,6 @@ const RocTarget = enum {
             else => null,
         };
     }
-
-    fn muslRuntimeSourceTarget(self: RocTarget) ?RocTarget {
-        return switch (self) {
-            .x64v1musl => .x64musl,
-            .arm64v1musl => .arm64musl,
-            else => null,
-        };
-    }
 };
 
 /// All cross-compilation targets for `zig build`
@@ -100,6 +92,8 @@ pub fn build(b: *std.Build) void {
     cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/libhost.a")).step);
     cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/host.lib")).step);
 
+    const runtime_stage = b.addSystemCommand(&.{ "python3", "scripts/runtime.py", "stage" });
+
     // Default step: build for all targets (with cleanup first)
     const all_step = b.getInstallStep();
     all_step.dependOn(cleanup_step);
@@ -107,6 +101,8 @@ pub fn build(b: *std.Build) void {
     // Create copy step for all targets
     const copy_all = b.addUpdateSourceFiles();
     all_step.dependOn(&copy_all.step);
+    copy_all.step.dependOn(&runtime_stage.step);
+    copy_all.step.dependOn(cleanup_step);
 
     // Build for each Roc target
     for (all_targets) |roc_target| {
@@ -118,15 +114,6 @@ pub fn build(b: *std.Build) void {
             host_lib.getEmittedBin(),
             b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
         );
-
-        if (roc_target.muslRuntimeSourceTarget()) |runtime_source_target| {
-            for ([2][]const u8{ "crt1.o", "libc.a" }) |filename| {
-                copy_all.addCopyFileToSource(
-                    b.path(b.pathJoin(&.{ "platform", "targets", runtime_source_target.targetDir(), filename })),
-                    b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), filename }),
-                );
-            }
-        }
     }
 
     // Native step: build only for the current platform (with full cleanup first)
@@ -151,17 +138,12 @@ pub fn build(b: *std.Build) void {
     );
 
     if (native_roc_target.baselineMuslTarget()) |baseline_roc_target| {
+        copy_native.step.dependOn(&runtime_stage.step);
         const baseline_lib = buildHostLib(b, b.resolveTargetQuery(baseline_roc_target.toZigTarget()), optimize);
         copy_native.addCopyFileToSource(
             baseline_lib.getEmittedBin(),
             b.pathJoin(&.{ "platform", "targets", baseline_roc_target.targetDir(), baseline_roc_target.libFilename() }),
         );
-        for ([2][]const u8{ "crt1.o", "libc.a" }) |filename| {
-            copy_native.addCopyFileToSource(
-                b.path(b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), filename })),
-                b.pathJoin(&.{ "platform", "targets", baseline_roc_target.targetDir(), filename }),
-            );
-        }
         native_step.dependOn(&baseline_lib.step);
     }
     native_step.dependOn(&copy_native.step);
@@ -289,8 +271,8 @@ fn buildHostLib(
             .pic = true,
         }),
     });
-    // Force bundle compiler-rt to resolve runtime symbols like __main
-    host_lib.bundle_compiler_rt = true;
+    // Linux gets compiler-rt from the verified runtime; other targets embed it.
+    host_lib.bundle_compiler_rt = target.result.os.tag != .linux;
 
     return host_lib;
 }

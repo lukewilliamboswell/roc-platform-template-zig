@@ -8,7 +8,8 @@ from that action revision. Update it alongside the controller when its contract 
 ## Validation
 
 Install Zig 0.16.0 and the compiler printed by `python3 scripts/roc_version.py`.
-That command checks agreement across the selected headers; `.github/roc-nightly.json`
+Run `python3 scripts/runtime.py fetch` before building from a fresh checkout.
+`roc_version.py` checks agreement across the selected headers; `.github/roc-nightly.json`
 lists paths, not another copy of the compiler version.
 
 | Lane | Command | Input |
