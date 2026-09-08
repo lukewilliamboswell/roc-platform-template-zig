@@ -32,9 +32,50 @@ of Roc nightlies. Existing tags and releases are never overwritten. If a run
 fails after reserving a tag or creating a draft, inspect the existing state and
 prepare a reviewed recovery; rerunning does not replace it automatically.
 
-The initial producer leaves the historical runtime files in Git until the first
-published archive and its attestations have been verified. The consumer migration
-then removes those files going forward, without rewriting Git history.
+The runtime producer and consumer have separate release lifecycles. Runtime
+updates require a new producer version and a reviewed update of `dependency.json`;
+Roc nightly updates do not change that lock. Historical Git commits are preserved.
+
+## Platform contributors
+
+Install Python 3.10+ and GitHub CLI 2.98+ alongside Zig and Roc. Fetch the pinned
+runtime before building from a fresh checkout:
+
+```sh
+python3 scripts/runtime.py fetch
+zig build
+zig build test
+./bundle.sh
+```
+
+Setup verifies the archive and SBOM hashes and both Sigstore attestations. It
+requires the locked repository, workflow, source commit, and `main` ref, and
+rejects self-hosted signers. There is no unsigned fallback. GitHub CLI fetches
+Sigstore trust metadata during setup; normal builds only check local hashes and
+work offline. In CI, setup uses the read-only job token. Locally, use `gh auth
+login` if the CLI requests authentication.
+
+Files live in `.zig-cache/runtime/<sha256>/`. Each build verifies the archive,
+its SBOM, and the extracted files before staging runtime files under the ignored
+`platform/targets/` directories. A cache mismatch fails with an error; rerun
+`fetch` to replace it with a newly verified download. Never edit the cached files.
+
+Platform bundles use a clean, explicit inventory of source modules, required host
+and runtime libraries, licenses and the runtime manifest. Unrelated local
+libraries cannot enter the bundle. Final platform publication signs the tested
+bundle and an SPDX SBOM that records the runtime release and its components.
+
+To verify downloads yourself:
+
+```sh
+gh attestation verify roc-runtime-1.0.0.tar.gz --repo lukewilliamboswell/roc-platform-template-zig --bundle provenance.sigstore.json
+gh attestation verify roc-runtime-1.0.0.tar.gz --repo lukewilliamboswell/roc-platform-template-zig --bundle sbom.sigstore.json --predicate-type https://spdx.dev/Document/v2.3
+```
+
+For platform releases, use the `.tar.zst` bundle and the corresponding
+`platform-provenance.sigstore.json` / `platform-sbom.sigstore.json` assets.
+`runtime.py fetch` adds the stricter identity and commit constraints from the
+reviewed dependency lock to the commands above.
 
 Attestations prove the recorded build identity and artifact integrity. They do
 not constitute an OpenSSF certification or an asserted SLSA level.

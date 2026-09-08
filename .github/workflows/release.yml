@@ -90,6 +90,11 @@ jobs:
           version: nightly-new-compiler
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
+      - name: Fetch and verify pinned runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/runtime.py fetch
+
       - name: Validate current source
         run: bash ci/all_tests.sh
 
@@ -117,11 +122,21 @@ jobs:
           echo "Bundle created: $BUNDLE_FILENAME"
           echo "bundle_filename=$BUNDLE_FILENAME" >> "$GITHUB_OUTPUT"
 
+      - name: Generate bundle SBOM and checksums
+        env:
+          BUNDLE: ${{ steps.bundle.outputs.bundle_filename }}
+        run: |
+          python3 scripts/platform_sbom.py "$BUNDLE" platform.spdx.json
+          sha256sum "$BUNDLE" platform.spdx.json > SHA256SUMS
+
       - name: Upload bundle artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: platform-bundle
-          path: ${{ steps.bundle.outputs.bundle_filename }}
+          path: |
+            ${{ steps.bundle.outputs.bundle_filename }}
+            platform.spdx.json
+            SHA256SUMS
           retention-days: 30
 
   test-bundle:
@@ -205,23 +220,65 @@ jobs:
         with:
           path: generated-docs
 
+  attest-platform:
+    name: Attest tested platform bundle
+    needs: [build-and-bundle, test-bundle, build-docs]
+    if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      # No source checkout or build commands in the signing job.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: platform-bundle
+      - run: sha256sum -c SHA256SUMS
+      - name: Attest provenance
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ needs.build-and-bundle.outputs.bundle_filename }}
+      - name: Attest SBOM
+        id: sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ needs.build-and-bundle.outputs.bundle_filename }}
+          sbom-path: platform.spdx.json
+      - name: Collect signatures
+        env:
+          PROVENANCE: ${{ steps.provenance.outputs.bundle-path }}
+          SBOM: ${{ steps.sbom.outputs.bundle-path }}
+        run: |
+          mkdir attestations
+          cp "$PROVENANCE" attestations/platform-provenance.sigstore.json
+          cp "$SBOM" attestations/platform-sbom.sigstore.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: platform-attestations
+          path: attestations/*
+          if-no-files-found: error
+
   create-release:
     name: Create GitHub Release
-    needs: [build-and-bundle, test-bundle, build-docs]
+    needs: [build-and-bundle, test-bundle, build-docs, attest-platform]
     runs-on: ubuntu-24.04
     # Only run on manual trigger
-    if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
+    if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation && github.ref == 'refs/heads/main'
     permissions:
       contents: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
       - name: Download bundle artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: platform-bundle
+
+      - name: Download attestations
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: platform-attestations
 
       - name: Create GitHub Release
         env:
@@ -233,7 +290,9 @@ jobs:
           COMPILER_CHANNEL: ${{ needs.build-and-bundle.outputs.compiler_channel }}
         run: |
           test -f "$BUNDLE_FILE"
-          sha256sum "$BUNDLE_FILE" > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          gh attestation verify "$BUNDLE_FILE" --repo "$GITHUB_REPOSITORY" --bundle platform-provenance.sigstore.json --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --source-digest "$SOURCE_SHA" --source-ref refs/heads/main
+          gh attestation verify "$BUNDLE_FILE" --repo "$GITHUB_REPOSITORY" --bundle platform-sbom.sigstore.json --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --source-digest "$SOURCE_SHA" --source-ref refs/heads/main --predicate-type https://spdx.dev/Document/v2.3
           python3 - <<'PYCODE'
           import os
           from pathlib import Path
@@ -250,9 +309,11 @@ jobs:
           # Creating a new ref fails if another publisher claimed this tag.
           gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
             -f "ref=refs/tags/$RELEASE_VERSION" -f "sha=$SOURCE_SHA"
-          gh release create "$RELEASE_VERSION" "$BUNDLE_FILE" SHA256SUMS \
-            --verify-tag --title "$RELEASE_VERSION" \
+          gh release create "$RELEASE_VERSION" "$BUNDLE_FILE" SHA256SUMS platform.spdx.json platform-*.sigstore.json \
+            --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$RELEASE_VERSION" \
             --generate-notes --notes-file release-notes.md
+          gh release edit "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --draft=false
+          gh release verify "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY"
 
   deploy-docs:
     name: Deploy Docs to GitHub Pages

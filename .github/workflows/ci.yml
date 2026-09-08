@@ -14,6 +14,16 @@ permissions:
   contents: read
 
 jobs:
+  tooling:
+    name: Runtime tooling and source hygiene
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 scripts/check_binary_artifacts.py
+      - run: python3 -m unittest discover -s scripts -p 'test_runtime_*.py' -v
+
   build:
     name: Current source (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -52,6 +62,11 @@ jobs:
         with:
           version: nightly-new-compiler
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
+
+      - name: Fetch and verify pinned runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/runtime.py fetch
 
       - name: Run all tests
         uses: roc-lang/roc/.github/actions/flaky-retry@3d0fdde9ae6ffb5ef411f8c8c2fc2cdce22a74fe

@@ -191,7 +191,7 @@ def smoke(archive: Path):
         name = {"x86_64": "x64musl", "aarch64": "arm64musl"}[platform.machine()]
         target = lock["targets"][name]
         obj, binary = work / "smoke.o", work / "smoke"
-        run([zig, "cc", "-target", target, "-mcpu=baseline", "-O2", "-c", ROOT / "runtime/smoke.c", "-o", obj])
+        run([zig, "cc", "-target", target, "-mcpu=baseline", "-O2", "-UNDEBUG", "-c", ROOT / "runtime/smoke.c", "-o", obj])
         libs = stage / "targets" / name
         # Direct LLD invocation ensures there is no implicit host/toolchain libc.
         run([zig, "ld.lld", "-static", "-o", binary, libs / "crt1.o", obj,
