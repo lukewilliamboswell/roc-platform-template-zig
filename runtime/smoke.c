@@ -1,3 +1,7 @@
+#ifdef NDEBUG
+#error "Runtime smoke tests require assertions; compile with -UNDEBUG"
+#endif
+
 #include <assert.h>
 #include <errno.h>
 #include <math.h>

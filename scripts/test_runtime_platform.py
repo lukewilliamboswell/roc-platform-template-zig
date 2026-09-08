@@ -33,7 +33,7 @@ def main(archive):
         header = work / "platform/main.roc"
         header.write_text(header.read_text().replace('"libc.a"]', '"libc.a", "libzigc.a", "libcompiler_rt.a"]'))
         build = work / "build.zig"
-        build.write_text(build.read_text().replace("copy_all.step.dependOn(&runtime_stage.step);", "").replace("copy_native.step.dependOn(&runtime_stage.step);", "").replace('host_lib.bundle_compiler_rt = true;', 'host_lib.bundle_compiler_rt = target.result.os.tag != .linux;'))
+        build.write_text(build.read_text().replace("copy_all.step.dependOn(&runtime_stage.step);", "_ = runtime_stage;").replace("copy_native.step.dependOn(&runtime_stage.step);", "").replace('host_lib.bundle_compiler_rt = true;', 'host_lib.bundle_compiler_rt = target.result.os.tag != .linux;'))
         subprocess.run(["zig", "build", "test"], cwd=work, check=True)
         baseline = {"x86_64": "x64v1musl", "aarch64": "arm64v1musl"}[platform.machine()]
         spec_path = work / "scripts/test_spec.json"
