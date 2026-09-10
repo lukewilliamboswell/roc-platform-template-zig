@@ -1,7 +1,7 @@
 platform ""
     requires {} { main! : List(Str) => Try({}, [Exit(I32), ..]) }
     exposes [Stdout, Stderr, Stdin]
-    packages { roc: "nightly-2026-09-09-7dadc35" }
+    packages { roc: "nightly-2026-09-10-a670e34" }
     provides { "roc_main": main_for_host! }
     hosted {
         "roc_stderr_line": Host.stderr_line!,
