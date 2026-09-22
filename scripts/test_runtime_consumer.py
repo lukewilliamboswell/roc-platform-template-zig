@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -7,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import runtime
+import build_input_release
 from runtime_common import digest, runtime_members, write_json
 
 
@@ -90,6 +92,58 @@ class ConsumerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp, patch("runtime.cache_path", return_value=Path(temp)):
             with self.assertRaisesRegex(ValueError, "runtime.py fetch"):
                 runtime.check({"sha256": "a" * 64})
+
+    def test_content_cache_hit_is_rehashed_without_network(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            lock = self.fixture(root) | {"content": True}
+            lock["size"] = (root / "archive.tar.gz").stat().st_size
+            with patch("runtime.load_lock", return_value=lock), \
+                 patch("runtime.cache_path", return_value=root), \
+                 patch("runtime.urllib.request.urlretrieve", side_effect=AssertionError("network")):
+                runtime.fetch()
+
+    def test_corrupt_content_cache_is_replaced_from_locked_url(self):
+        with tempfile.TemporaryDirectory() as temp, tempfile.TemporaryDirectory() as source_temp:
+            root, source = Path(temp), Path(source_temp)
+            lock = self.fixture(source) | {"content": True, "url": "https://example.invalid/link-inputs-all.tar"}
+            lock["size"] = (source / "archive.tar.gz").stat().st_size
+            root.mkdir(exist_ok=True)
+            (root / "archive.tar.gz").write_bytes(b"corrupt")
+            def download(url, destination):
+                self.assertEqual(url, lock["url"])
+                Path(destination).write_bytes((source / "archive.tar.gz").read_bytes())
+            with patch("runtime.load_lock", return_value=lock), \
+                 patch("runtime.cache_path", return_value=root), \
+                 patch("runtime.urllib.request.urlretrieve", side_effect=download) as retrieve:
+                runtime.fetch()
+            retrieve.assert_called_once()
+            self.assertEqual(digest(root / "archive.tar.gz"), lock["sha256"])
+
+    def test_publication_archive_is_uncompressed_deterministic_tar_with_exact_manifest(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            built, output = root / "built", root / "release"
+            built.mkdir()
+            fixture = root / "fixture"
+            fixture.mkdir()
+            self.fixture(fixture)
+            (built / "roc-runtime-1.0.0.tar.gz").write_bytes((fixture / "archive.tar.gz").read_bytes())
+            environment = {"GITHUB_REPOSITORY": "lukewilliamboswell/roc-platform-template-zig",
+                           "GITHUB_SHA": "a" * 40, "GITHUB_REF": "refs/heads/change-runtime"}
+            with patch.dict(os.environ, environment, clear=True), \
+                 patch("build_input_release.input_fingerprint", return_value="f" * 64):
+                build_input_release.prepare(built, output)
+            asset = output / "link-inputs-all.tar"
+            self.assertNotEqual(asset.read_bytes()[:2], b"\x1f\x8b")
+            with tarfile.open(asset, "r:") as archive:
+                self.assertEqual({member.name for member in archive}, runtime_members())
+                self.assertTrue(all(member.isfile() and member.mtime == 0 and member.mode == 0o644
+                                    for member in archive.getmembers()))
+            manifest = json.loads((output / "build-input-release.json").read_text())
+            self.assertEqual(set(manifest), {"schema_version", "kind", "source", "assets"})
+            self.assertEqual(manifest["assets"]["all"], {
+                "asset": asset.name, "sha256": digest(asset), "size": asset.stat().st_size})
 
 
 if __name__ == "__main__":

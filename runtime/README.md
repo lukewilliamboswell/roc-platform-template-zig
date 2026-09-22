@@ -20,12 +20,18 @@ archives and SBOMs. Native x86-64 and ARM64 jobs test startup, allocation, math,
 threads, TLS and stdio with only the archive's runtime libraries. Candidate Roc
 tests use temporary platform copies, including baseline target builds.
 
-After a reviewed producer change merges to `main`, manually dispatch **Runtime
-release**. Compilation and testing have read-only permissions. The publishing
-job performs no source checkout, signs provenance and SPDX SBOM attestations for
-the tested archive, and publishes a draft only after attaching all assets.
-Enable repository release immutability before the first publication. Runtime
-tags use `runtime-VERSION` and never become the latest platform release.
+Linker-input changes are made on a same-repository pull-request branch. The
+candidate workflow builds twice, exercises the native runtime, and attests the
+exact archive and release manifest. From `main`, dispatch **Publish PR linker
+inputs** with that PR number. The pinned automation controller verifies the PR
+head, producer workflow, hashes, and attestations before publishing a release
+whose tag is derived from the manifest hash; it then adds only
+`link-inputs.lock.json` as a lease-guarded GitHub-signed commit to the PR.
+
+This split is intentional: candidate code gets build authority but no release
+or repository-write authority. The default-branch controller never executes PR
+code. After the publisher infrastructure exists on `main`, every later required
+linker-input change can be released and selected by the same material-change PR.
 
 Versions live in `sources.json` and advance through reviewed changes independently
 of Roc nightlies. Existing tags and releases are never overwritten. If a run
@@ -33,7 +39,7 @@ fails after reserving a tag or creating a draft, inspect the existing state and
 prepare a reviewed recovery; rerunning does not replace it automatically.
 
 The runtime producer and consumer have separate release lifecycles. Runtime
-updates require a new producer version and a reviewed update of `dependency.json`;
+updates require a new candidate and a reviewed content-lock update;
 Roc nightly updates do not change that lock. Historical Git commits are preserved.
 
 ## Platform contributors
@@ -48,15 +54,26 @@ zig build test
 ./bundle.sh
 ```
 
-Setup verifies the archive and SBOM hashes and both Sigstore attestations. It
-requires the locked repository, workflow, source commit, and `main` ref, and
-rejects self-hosted signers. There is no unsigned fallback. GitHub CLI fetches
-Sigstore trust metadata during setup; normal builds only check local hashes and
-work offline. In CI, setup uses the read-only job token. Locally, use `gh auth
-login` if the CLI requests authentication.
+The trusted publisher verifies provenance once when admitting a dependency.
+Ordinary builds verify the reviewed archive size and SHA-256 on every use,
+including cache hits. They do not query the attestation service or rebuild a
+missing input: a cache miss downloads the exact locked asset. This makes the
+common path cheap and offline when cached while preserving provenance at the
+dependency-change boundary.
 
-Files live in `.zig-cache/runtime/<sha256>/`. Each build verifies the archive,
-its SBOM, and the extracted files before staging runtime files under the ignored
+During the first rollout, `runtime/dependency.json` remains the compatibility
+lock. Once the publisher adds `link-inputs.lock.json`, consumers prefer it; the
+legacy lock can then be removed in a reviewed cleanup.
+
+The first rollout is necessarily staged because the trusted publisher wrapper
+must already exist on the default branch. Merge an infrastructure PR containing
+the producer, consumer, wrapper, and compatibility read first. Then open an
+adoption PR that removes the legacy path and lock, dispatch the default-branch
+publisher for that PR, and let its signed lock-only commit make adoption green.
+This one-time ordering constraint is not a reason to rebuild inputs in routine CI.
+
+Files live in `.zig-cache/runtime/<sha256>/`. Each build verifies the archive
+and extracted files before staging runtime files under the ignored
 `platform/targets/` directories. A cache mismatch fails with an error; rerun
 `fetch` to replace it with a newly verified download. Never edit the cached files.
 
@@ -65,7 +82,7 @@ and runtime libraries, licenses and the runtime manifest. Unrelated local
 libraries cannot enter the bundle. Final platform publication signs the tested
 bundle and an SPDX SBOM that records the runtime release and its components.
 
-To verify downloads yourself:
+Legacy pre-adoption releases retain downloadable provenance and SBOM bundles:
 
 ```sh
 gh attestation verify roc-runtime-1.0.0.tar.gz --repo lukewilliamboswell/roc-platform-template-zig --bundle provenance.sigstore.json
