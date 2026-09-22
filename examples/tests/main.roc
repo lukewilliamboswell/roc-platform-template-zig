@@ -6,7 +6,7 @@ import pf.Stdout
 # Run with: roc test examples/tests/main.roc
 # NOTE: Type annotations on helper functions cause compiler panic
 
-main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
+main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str)])
 main! = |_args| {
     Stdout.line!("Run 'roc test --verbose examples/tests/main.roc' to execute the tests")?
     Ok({})

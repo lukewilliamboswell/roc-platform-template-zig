@@ -5,7 +5,7 @@ import pf.Stdout
 
 # Demonstrates: Reading multiline input from stdin until EOF, while loops, for loops, List.append
 
-main! : List(Str) => Try({}, [Exit(I32), StdinErr(Str), StdoutErr(Str), ..])
+main! : List(Str) => Try({}, [Exit(I32), StdinErr(Str), StdoutErr(Str)])
 main! = |_args| {
     var $lines = []
     var $continue = True
