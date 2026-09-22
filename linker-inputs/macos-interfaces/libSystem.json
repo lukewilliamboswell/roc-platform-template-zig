@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "library": "libSystem",
+  "install_name": "/usr/lib/libSystem.B.dylib",
+  "targets": ["x86_64-macos", "arm64-macos"],
+  "symbols": [
+    "__NSGetExecutablePath", "___bzero", "___error", "___getdirentries64",
+    "___ulock_wait2", "___ulock_wake", "__availability_version_check", "__exit",
+    "__tlv_bootstrap", "_abort", "_accept", "_arc4random_buf", "_bind", "_bzero",
+    "_chdir", "_clock_getres", "_clock_gettime", "_close$NOCANCEL", "_connect",
+    "_dup2", "_execve", "_exit", "_faccessat", "_fchdir", "_fchmod", "_fchmodat",
+    "_fchown", "_fcntl", "_fcopyfile", "_flock", "_fork", "_free", "_freeaddrinfo",
+    "_fstat", "_fstat$INODE64", "_fstatat", "_fstatat$INODE64", "_fsync",
+    "_ftruncate", "_futimens", "_getaddrinfo", "_getcwd", "_getsockname",
+    "_if_nametoindex", "_ioctl", "_isatty", "_kill", "_linkat", "_listen",
+    "_lseek", "_malloc", "_mkdirat", "_mmap", "_munmap", "_nanosleep", "_open",
+    "_openat", "_pipe", "_poll", "_pread", "_preadv", "_pthread_attr_destroy",
+    "_pthread_attr_init", "_pthread_attr_setguardsize", "_pthread_attr_setstacksize",
+    "_pthread_create", "_pthread_detach", "_pthread_kill", "_pthread_self",
+    "_pthread_threadid_np", "_pwrite", "_pwritev", "_read", "_readlinkat", "_readv",
+    "_realpath$DARWIN_EXTSN", "_recvmsg", "_renameat", "_sendfile", "_sendmsg",
+    "_setpgid", "_setregid", "_setreuid", "_setsockopt", "_shutdown", "_sigaction",
+    "_sigaltstack", "_sigemptyset", "_socket", "_socketpair", "_symlinkat",
+    "_sys_icache_invalidate", "_unlinkat", "_utimensat", "_wait4", "_write", "_writev"
+  ],
+  "evidence": [
+    {
+      "kind": "project-source-audit",
+      "path": "src/host.zig",
+      "purpose": "The platform host and Zig standard-library calls define the minimal interface surface."
+    },
+    {
+      "kind": "native-unresolved-symbol-audit",
+      "command": "nm -u platform/targets/{x64mac,arm64mac}/libhost.a",
+      "purpose": "Review changes against both architecture host archives before release."
+    }
+  ]
+}
