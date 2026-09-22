@@ -1,5 +1,5 @@
 platform ""
-    requires {} { main! : List(Str) => Try({}, [Exit(I32), ..]) }
+    requires {} { main! : List(Str) => Try({}, [Exit(I32)]) }
     exposes [Stdout, Stderr, Stdin]
     packages { roc: "nightly-2026-09-12-220fd47" }
     provides { "roc_main": main_for_host! }
