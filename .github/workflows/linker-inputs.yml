@@ -71,7 +71,7 @@ jobs:
       id-token: write
       attestations: write
     # Pinned to the reviewed controller commit; never replace with a moving ref.
-    uses: lukewilliamboswell/roc-automation/.github/workflows/publish-linker-inputs.yml@1652c3fbd62f7c201d47a7af66023d95d95e2b0f
+    uses: lukewilliamboswell/roc-automation/.github/workflows/publish-linker-inputs.yml@714fa0c68b4327ea097ae1b05d13c56769a1c3ed
     with:
       release-tag: linker-inputs-v${{ needs.build.outputs.version }}
       artifact-name: linker-inputs-1
