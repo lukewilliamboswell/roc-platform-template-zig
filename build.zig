@@ -88,7 +88,7 @@ pub fn build(b: *std.Build) void {
     cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/libhost.a")).step);
     cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/host.lib")).step);
 
-    const runtime_stage = b.addSystemCommand(&.{ "python3", "scripts/runtime.py", "stage" });
+    const runtime_stage = b.addSystemCommand(&.{ "python3", "scripts/linker_inputs.py", "stage" });
 
     // Default step: build for all targets (with cleanup first)
     const all_step = b.getInstallStep();

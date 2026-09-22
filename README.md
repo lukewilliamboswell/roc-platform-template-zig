@@ -62,11 +62,11 @@ python3 scripts/test.py --operation run
 ## Building
 
 For a fresh checkout, install Python 3.10+ and GitHub CLI 2.98+, then fetch the
-pinned runtime once. This verifies its hashes, provenance and SBOM attestations;
+pinned linker inputs once. This verifies their hashes, provenance and SBOM attestations;
 subsequent builds work offline.
 
 ```bash
-python3 scripts/runtime.py fetch
+python3 scripts/linker_inputs.py fetch
 
 # Build for all supported targets (cross-compilation)
 zig build -Doptimize=ReleaseSafe
@@ -108,8 +108,8 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 Linux musl targets include verified runtime files (`crt1.o`, `libc.a`, `libzigc.a`, `libcompiler_rt.a`) for standalone executables. The `v1` targets use each architecture's baseline instruction set for CPUs without the features required by the default targets.
 
 ARM64 Windows is intentionally not advertised: release validation cannot yet
-execute that target natively. External linker inputs are moving to the single
-signed `linker-inputs-vX.Y.Z` stream documented in
+execute that target natively. External linker inputs use the single signed,
+content-addressed `linker-inputs-vX.Y.Z` stream documented in
 [`linker-inputs/README.md`](linker-inputs/README.md). Host archives continue to
 be built from the platform source in this checkout and are not release inputs.
 
