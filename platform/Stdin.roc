@@ -8,7 +8,7 @@ Stdin := [].{
     ## an empty string.
     ##
     ## Returns `Err(StdinErr(message))` if the host cannot read from stdin.
-    line! : {} => Try(Str, [StdinErr(Str), ..])
+    line! : {} => Try(Str, [StdinErr(Str)])
     line! = |{}|
         match Host.stdin_line!({}) {
             Ok(line) => Ok(line)

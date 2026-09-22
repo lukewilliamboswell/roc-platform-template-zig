@@ -5,7 +5,7 @@ import pf.Stdout
 # Demonstrates: fold, pure functions, lambdas
 # NOTE: Some fold operations with numbers have compiler bugs
 
-main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
+main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str)])
 main! = |_args| {
     # Build a string using fold - concatenate list items
     joined = ["Hello", " ", "World", "!"].fold("", |acc, s| Str.concat(acc, s))

@@ -4,7 +4,7 @@ import pf.Stdout
 
 # Demonstrates: while loops, var/$variables, pattern matching
 
-main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
+main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str)])
 main! = |_args| {
     var $n = 1
 
