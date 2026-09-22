@@ -102,11 +102,16 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 | x64musl | `platform/targets/x64musl/libhost.a` |
 | x64v1musl | `platform/targets/x64v1musl/libhost.a` |
 | arm64mac | `platform/targets/arm64mac/libhost.a` |
-| arm64win | `platform/targets/arm64win/host.lib` |
 | arm64musl | `platform/targets/arm64musl/libhost.a` |
 | arm64v1musl | `platform/targets/arm64v1musl/libhost.a` |
 
 Linux musl targets include verified runtime files (`crt1.o`, `libc.a`, `libzigc.a`, `libcompiler_rt.a`) for standalone executables. The `v1` targets use each architecture's baseline instruction set for CPUs without the features required by the default targets.
+
+ARM64 Windows is intentionally not advertised: release validation cannot yet
+execute that target natively. External linker inputs are moving to the single
+signed `linker-inputs-vX.Y.Z` stream documented in
+[`linker-inputs/README.md`](linker-inputs/README.md). Host archives continue to
+be built from the platform source in this checkout and are not release inputs.
 
 ## Maintenance and releases
 

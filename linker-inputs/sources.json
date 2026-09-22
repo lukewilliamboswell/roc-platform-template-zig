@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "version": "1.0.0",
+  "zig_version": "0.16.0",
+  "runtime_sources": "../runtime/sources.json",
+  "targets": {
+    "linux": ["x64musl", "arm64musl"],
+    "macos": ["x64mac", "arm64mac"],
+    "windows": ["x64win"]
+  },
+  "macos_interface": "macos-interfaces/libSystem.json",
+  "windows_target": "x86_64-windows-gnu"
+}

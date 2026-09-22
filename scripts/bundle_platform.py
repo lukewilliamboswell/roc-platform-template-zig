@@ -11,7 +11,7 @@ import tempfile
 from runtime import load_lock, stage
 from runtime_common import ROOT, RUNTIME_FILES, digest, write_json
 
-TARGETS = ("x64mac", "arm64mac", "x64win", "arm64win", "x64musl", "x64v1musl", "arm64musl", "arm64v1musl")
+TARGETS = ("x64mac", "arm64mac", "x64win", "x64musl", "x64v1musl", "arm64musl", "arm64v1musl")
 
 
 def bundle(arguments):

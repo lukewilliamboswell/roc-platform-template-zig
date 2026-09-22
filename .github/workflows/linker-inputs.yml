@@ -1,0 +1,78 @@
+name: Linker inputs
+
+on:
+  pull_request:
+    paths:
+      - 'linker-inputs/**'
+      - 'runtime/**'
+      - 'scripts/*linker_inputs*.py'
+      - 'scripts/build_runtime.py'
+      - 'scripts/runtime_common.py'
+      - '.github/workflows/linker-inputs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linker-inputs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Deterministic build (${{ matrix.copy }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        copy: [1, 2]
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned normalization and signature tools
+        run: |
+          PACKAGE=$(python3 -c 'import json; print(json.load(open("runtime/sources.json"))["objcopy"]["package"])')
+          sudo apt-get update
+          sudo apt-get install -y minisign "$PACKAGE"
+      - name: Test archive, inventory, and extraction safety
+        run: python3 -m unittest discover -s scripts -p 'test_linker_inputs.py' -v
+      - name: Build from verified sources and project-authored interface metadata
+        run: python3 scripts/build_linker_inputs.py --output .zig-cache/linker-inputs-dist
+      - name: Read version
+        id: metadata
+        run: |
+          VERSION=$(python3 -c 'import json; print(json.load(open("linker-inputs/sources.json"))["version"])')
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linker-inputs-${{ matrix.copy }}
+          path: .zig-cache/linker-inputs-dist/*
+          if-no-files-found: error
+
+  reproducibility:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: linker-inputs-*
+      - run: diff -r linker-inputs-1 linker-inputs-2
+
+  publish:
+    needs: [build, reproducibility]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    # Pinned to the reviewed controller commit; never replace with a moving ref.
+    uses: lukewilliamboswell/roc-automation/.github/workflows/publish-linker-inputs.yml@d08d7bb54d567c2db4c2ee889935760bf9c87c02
+    with:
+      release-tag: linker-inputs-v${{ needs.build.outputs.version }}
+      artifact-name: linker-inputs-1
+      manifest-path: dependency.json
+      release-name: Zig linker inputs ${{ needs.build.outputs.version }}

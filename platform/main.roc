@@ -17,7 +17,6 @@ platform ""
         arm64musl: { inputs: ["crt1.o", "libhost.a", app, "libc.a", "libzigc.a", "libcompiler_rt.a"] },
         arm64v1musl: { inputs: ["crt1.o", "libhost.a", app, "libc.a", "libzigc.a", "libcompiler_rt.a"] },
         x64win: { inputs: ["host.lib", app] },
-        arm64win: { inputs: ["host.lib", app] },
     }
 
 import Stdout

@@ -11,7 +11,6 @@ const RocTarget = enum {
 
     // arm64 (aarch64) targets
     arm64mac,
-    arm64win,
     arm64musl,
     arm64v1musl,
 
@@ -27,7 +26,6 @@ const RocTarget = enum {
                 .abi = .musl,
             },
             .arm64mac => .{ .cpu_arch = .aarch64, .os_tag = .macos },
-            .arm64win => .{ .cpu_arch = .aarch64, .os_tag = .windows, .abi = .msvc },
             .arm64musl => .{ .cpu_arch = .aarch64, .os_tag = .linux, .abi = .musl },
             .arm64v1musl => .{
                 .cpu_arch = .aarch64,
@@ -45,7 +43,6 @@ const RocTarget = enum {
             .x64musl => "x64musl",
             .x64v1musl => "x64v1musl",
             .arm64mac => "arm64mac",
-            .arm64win => "arm64win",
             .arm64musl => "arm64musl",
             .arm64v1musl => "arm64v1musl",
         };
@@ -53,7 +50,7 @@ const RocTarget = enum {
 
     fn libFilename(self: RocTarget) []const u8 {
         return switch (self) {
-            .x64win, .arm64win => "host.lib",
+            .x64win => "host.lib",
             else => "libhost.a",
         };
     }
@@ -74,7 +71,6 @@ const all_targets = [_]RocTarget{
     .x64musl,
     .x64v1musl,
     .arm64mac,
-    .arm64win,
     .arm64musl,
     .arm64v1musl,
 };
@@ -218,7 +214,7 @@ fn detectNativeRocTarget(target: std.Target) ?RocTarget {
         },
         .windows => switch (target.cpu.arch) {
             .x86_64 => .x64win,
-            .aarch64 => .arm64win,
+            .aarch64 => null,
             else => null,
         },
         else => null,
