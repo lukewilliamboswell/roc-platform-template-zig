@@ -1,7 +1,7 @@
 platform ""
     requires {} { main! : List(Str) => Try({}, [Exit(I32), ..]) }
     exposes [Stdout, Stderr, Stdin]
-    packages { roc: "nightly-2026-09-07-14d9829" }
+    packages { roc: "nightly-2026-09-12-220fd47" }
     provides { "roc_main": main_for_host! }
     hosted {
         "roc_stderr_line": Host.stderr_line!,
@@ -17,7 +17,6 @@ platform ""
         arm64musl: { inputs: ["crt1.o", "libhost.a", app, "libc.a", "libzigc.a", "libcompiler_rt.a"] },
         arm64v1musl: { inputs: ["crt1.o", "libhost.a", app, "libc.a", "libzigc.a", "libcompiler_rt.a"] },
         x64win: { inputs: ["host.lib", app] },
-        arm64win: { inputs: ["host.lib", app] },
     }
 
 import Stdout

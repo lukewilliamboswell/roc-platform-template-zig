@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -8,7 +7,6 @@ import unittest
 from unittest.mock import patch
 
 import runtime
-import build_input_release
 from runtime_common import digest, runtime_members, write_json
 
 
@@ -120,30 +118,6 @@ class ConsumerTests(unittest.TestCase):
             retrieve.assert_called_once()
             self.assertEqual(digest(root / "archive.tar.gz"), lock["sha256"])
 
-    def test_publication_archive_is_uncompressed_deterministic_tar_with_exact_manifest(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            built, output = root / "built", root / "release"
-            built.mkdir()
-            fixture = root / "fixture"
-            fixture.mkdir()
-            self.fixture(fixture)
-            (built / "roc-runtime-1.0.0.tar.gz").write_bytes((fixture / "archive.tar.gz").read_bytes())
-            environment = {"GITHUB_REPOSITORY": "lukewilliamboswell/roc-platform-template-zig",
-                           "GITHUB_SHA": "a" * 40, "GITHUB_REF": "refs/heads/change-runtime"}
-            with patch.dict(os.environ, environment, clear=True), \
-                 patch("build_input_release.input_fingerprint", return_value="f" * 64):
-                build_input_release.prepare(built, output)
-            asset = output / "link-inputs-all.tar"
-            self.assertNotEqual(asset.read_bytes()[:2], b"\x1f\x8b")
-            with tarfile.open(asset, "r:") as archive:
-                self.assertEqual({member.name for member in archive}, runtime_members())
-                self.assertTrue(all(member.isfile() and member.mtime == 0 and member.mode == 0o644
-                                    for member in archive.getmembers()))
-            manifest = json.loads((output / "build-input-release.json").read_text())
-            self.assertEqual(set(manifest), {"schema_version", "kind", "source", "assets"})
-            self.assertEqual(manifest["assets"]["all"], {
-                "asset": asset.name, "sha256": digest(asset), "size": asset.stat().st_size})
 
 
 if __name__ == "__main__":

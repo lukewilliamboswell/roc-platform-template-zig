@@ -63,15 +63,15 @@ jobs:
           version: nightly-new-compiler
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
-      - name: Fetch and verify pinned runtime
+      - name: Restore content-addressed linker inputs
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: .zig-cache/runtime
-          key: linker-inputs-${{ runner.os }}-${{ hashFiles('link-inputs.lock.json', 'runtime/dependency.json') }}
+          path: .zig-cache/linker-inputs
+          key: linker-inputs-${{ runner.os }}-${{ hashFiles('linker-inputs.lock.json') }}
       - name: Download a cache miss and verify every cache hit
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/runtime.py fetch
+        run: python3 scripts/linker_inputs.py fetch
 
       - name: Run all tests
         uses: roc-lang/roc/.github/actions/flaky-retry@3d0fdde9ae6ffb5ef411f8c8c2fc2cdce22a74fe
@@ -99,7 +99,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # ratchet:mlugg/setup-zig@v2.2.1

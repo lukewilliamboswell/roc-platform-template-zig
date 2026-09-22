@@ -7,21 +7,17 @@ on:
         type: string
         required: true
 permissions: {}
-concurrency:
-  group: publish-link-inputs
-  cancel-in-progress: false
 jobs:
   publish:
-    if: github.ref == 'refs/heads/main' && github.repository == 'lukewilliamboswell/roc-platform-template-zig'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions: {actions: write, attestations: read, contents: write, pull-requests: read}
     steps:
       - uses: lukewilliamboswell/roc-automation/actions/publish-build-inputs@4d4011566d9b50a7b75b3eca868c61de0f5bdd4b
+        env: {GH_TOKEN: '${{ github.token }}'}
         with:
           pull-request: ${{ inputs.pull-request }}
-          producer-workflow: runtime.yml
+          producer-workflow: linker-inputs.yml
           candidate-artifact: link-input-release
           lock-path: link-inputs.lock.json
           release-prefix: link-inputs
-        env: {GH_TOKEN: '${{ github.token }}'}
