@@ -90,10 +90,10 @@ jobs:
           version: nightly-new-compiler
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
-      - name: Fetch and verify pinned runtime
+      - name: Fetch and verify pinned linker inputs
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/runtime.py fetch
+        run: python3 scripts/linker_inputs.py fetch
 
       - name: Validate current source
         run: bash ci/all_tests.sh

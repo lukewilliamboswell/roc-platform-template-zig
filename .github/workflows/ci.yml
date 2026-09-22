@@ -63,10 +63,10 @@ jobs:
           version: nightly-new-compiler
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
-      - name: Fetch and verify pinned runtime
+      - name: Fetch and verify pinned linker inputs
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/runtime.py fetch
+        run: python3 scripts/linker_inputs.py fetch
 
       - name: Run all tests
         uses: roc-lang/roc/.github/actions/flaky-retry@3d0fdde9ae6ffb5ef411f8c8c2fc2cdce22a74fe

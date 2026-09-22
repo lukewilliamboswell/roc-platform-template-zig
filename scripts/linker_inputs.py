@@ -48,7 +48,7 @@ def cache_path(lock: dict) -> Path:
 
 def attest_args(subject: Path, lock: dict) -> list[str]:
     return ["gh", "attestation", "verify", str(subject),
-            "--repo", lock["repository"], "--signer-repo", lock["signer_repository"],
+            "--repo", lock["repository"],
             "--signer-workflow", lock["workflow"],
             "--source-digest", lock["source_commit"], "--signer-digest", lock["signer_commit"],
             "--source-ref", lock["source_ref"], "--deny-self-hosted-runners",

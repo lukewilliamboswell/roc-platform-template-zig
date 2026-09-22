@@ -63,7 +63,9 @@ class LinkerInputTests(unittest.TestCase):
         args = attest_args(Path("archive.tar.gz"), lock)
         self.assertNotIn("--bundle", args)
         self.assertEqual(args[args.index("--repo") + 1], "owner/platform")
-        self.assertEqual(args[args.index("--signer-repo") + 1], "owner/automation")
+        self.assertNotIn("--signer-repo", args)
+        self.assertEqual(args[args.index("--signer-workflow") + 1], lock["workflow"])
+        self.assertEqual(args[args.index("--signer-digest") + 1], lock["signer_commit"])
         self.assertEqual(args[args.index("--predicate-type") + 1], "https://slsa.dev/provenance/v1")
 
 
