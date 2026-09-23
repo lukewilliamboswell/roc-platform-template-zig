@@ -91,6 +91,34 @@ class ConsumerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "runtime.py fetch"):
                 runtime.check({"sha256": "a" * 64})
 
+    def test_content_cache_hit_is_rehashed_without_network(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            lock = self.fixture(root) | {"content": True}
+            lock["size"] = (root / "archive.tar.gz").stat().st_size
+            with patch("runtime.load_lock", return_value=lock), \
+                 patch("runtime.cache_path", return_value=root), \
+                 patch("runtime.urllib.request.urlretrieve", side_effect=AssertionError("network")):
+                runtime.fetch()
+
+    def test_corrupt_content_cache_is_replaced_from_locked_url(self):
+        with tempfile.TemporaryDirectory() as temp, tempfile.TemporaryDirectory() as source_temp:
+            root, source = Path(temp), Path(source_temp)
+            lock = self.fixture(source) | {"content": True, "url": "https://example.invalid/link-inputs-all.tar"}
+            lock["size"] = (source / "archive.tar.gz").stat().st_size
+            root.mkdir(exist_ok=True)
+            (root / "archive.tar.gz").write_bytes(b"corrupt")
+            def download(url, destination):
+                self.assertEqual(url, lock["url"])
+                Path(destination).write_bytes((source / "archive.tar.gz").read_bytes())
+            with patch("runtime.load_lock", return_value=lock), \
+                 patch("runtime.cache_path", return_value=root), \
+                 patch("runtime.urllib.request.urlretrieve", side_effect=download) as retrieve:
+                runtime.fetch()
+            retrieve.assert_called_once()
+            self.assertEqual(digest(root / "archive.tar.gz"), lock["sha256"])
+
+
 
 if __name__ == "__main__":
     unittest.main()

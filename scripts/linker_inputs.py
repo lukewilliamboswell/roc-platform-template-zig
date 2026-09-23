@@ -22,6 +22,25 @@ def load_lock() -> dict:
     if not LOCK.is_file():
         raise ValueError("No aggregate linker-input release is pinned yet; see linker-inputs/README.md")
     lock = json.loads(LOCK.read_text())
+    if lock.get("schema_version") == 1:
+        record, source = lock.get("targets", {}).get("all", {}), lock.get("source", {})
+        if (set(lock) != {"schema_version", "kind", "repository", "release", "manifest", "source", "targets"}
+                or lock.get("kind") != "roc-zig-link-inputs"
+                or lock.get("repository") != "lukewilliamboswell/roc-platform-template-zig"
+                or not re.fullmatch(r"link-inputs-sha256-[0-9a-f]{64}", lock.get("release", ""))
+                or set(lock.get("targets", {})) != {"all"}
+                or set(record) != {"asset", "sha256", "size"} or record.get("asset") != "link-inputs-all.tar"
+                or SHA256.fullmatch(record.get("sha256", "")) is None
+                or not isinstance(record.get("size"), int) or record["size"] <= 0
+                or source.get("repository") != lock["repository"]
+                or source.get("workflow") != lock["repository"] + "/.github/workflows/linker-inputs.yml"
+                or COMMIT.fullmatch(source.get("sha", "")) is None
+                or SHA256.fullmatch(source.get("input_fingerprint", "")) is None):
+            raise ValueError("Invalid content-addressed linker-input lock")
+        return {"content": True, "repository": lock["repository"], "tag": lock["release"],
+                "url": f"https://github.com/{lock['repository']}/releases/download/{lock['release']}/{record['asset']}",
+                "sha256": record["sha256"], "size": record["size"], "source_commit": source["sha"],
+                "input_fingerprint": source["input_fingerprint"]}
     required = {"schema", "repository", "tag", "url", "sha256", "size", "sbom_sha256",
                 "source_commit", "signer_repository", "signer_commit", "workflow", "source_ref",
                 "input_fingerprint"}
@@ -63,12 +82,11 @@ def check(lock: dict | None = None) -> tuple[Path, dict]:
         raise ValueError("Linker inputs are missing. Run: python3 scripts/linker_inputs.py fetch")
     if archive.stat().st_size != lock["size"] or digest(archive) != lock["sha256"]:
         raise ValueError("Cached linker-input archive does not match the lock")
-    if digest(directory / "linker-inputs.spdx.json") != lock["sbom_sha256"]:
+    if not lock.get("content") and digest(directory / "linker-inputs.spdx.json") != lock["sbom_sha256"]:
         raise ValueError("Cached linker-input SBOM does not match the lock")
     manifest, files = read_archive(archive)
     if (manifest["source_commit"] != lock["source_commit"]
-            or "linker-inputs-v" + manifest["version"] != lock["tag"]
-            or manifest["input_fingerprint"] != lock["input_fingerprint"]):
+            or (not lock.get("content") and "linker-inputs-v" + manifest["version"] != lock["tag"])):
         raise ValueError("Archive dependency metadata does not match the lock")
     tree = directory / "tree"
     actual = {path.relative_to(tree).as_posix() for path in tree.rglob("*") if path.is_file()}
@@ -84,26 +102,35 @@ def fetch() -> None:
     lock = load_lock()
     destination = cache_path(lock)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        try:
+            check(lock)
+        except (ValueError, OSError, json.JSONDecodeError):
+            pass
+        else:
+            print("Reused content-hashed linker inputs from the verified cache")
+            return
     with tempfile.TemporaryDirectory(prefix="linker-input-download-", dir=destination.parent) as temporary:
         directory = Path(temporary)
-        base = lock["url"].rsplit("/", 1)[0]
         urllib.request.urlretrieve(lock["url"], directory / "archive.tar.gz")
-        urllib.request.urlretrieve(base + "/linker-inputs.spdx.json", directory / "linker-inputs.spdx.json")
+        if not lock.get("content"):
+            base = lock["url"].rsplit("/", 1)[0]
+            urllib.request.urlretrieve(base + "/linker-inputs.spdx.json", directory / "linker-inputs.spdx.json")
         if (digest(directory / "archive.tar.gz") != lock["sha256"]
-                or digest(directory / "linker-inputs.spdx.json") != lock["sbom_sha256"]):
+                or (not lock.get("content") and digest(directory / "linker-inputs.spdx.json") != lock["sbom_sha256"])):
             raise ValueError("Downloaded linker inputs do not match the lock")
-        for subject in (directory / "archive.tar.gz", directory / "linker-inputs.spdx.json"):
-            result = json.loads(subprocess.check_output(attest_args(subject, lock), text=True))
-            if not result:
-                raise ValueError("No valid linker-input attestation returned")
+        if not lock.get("content"):
+            for subject in (directory / "archive.tar.gz", directory / "linker-inputs.spdx.json"):
+                result = json.loads(subprocess.check_output(attest_args(subject, lock), text=True))
+                if not result:
+                    raise ValueError("No valid linker-input attestation returned")
         manifest, files = read_archive(directory / "archive.tar.gz")
         tree = directory / "tree"
         for name, data in files.items():
             path = tree / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
-        if (manifest["source_commit"] != lock["source_commit"]
-                or manifest["input_fingerprint"] != lock["input_fingerprint"]):
+        if manifest["source_commit"] != lock["source_commit"]:
             raise ValueError("Downloaded dependency metadata does not match the lock")
         backup = destination.with_name(destination.name + ".previous")
         if backup.exists():

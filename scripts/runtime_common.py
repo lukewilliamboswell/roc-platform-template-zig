@@ -4,12 +4,27 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import re
+import subprocess
 import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_FILES = ("crt1.o", "libc.a", "libzigc.a", "libcompiler_rt.a")
 TARGETS = ("x64musl", "arm64musl")
 LICENSES = ("licenses/Zig.txt", "licenses/musl.txt")
+PRODUCER_INPUTS = ("runtime/sources.json", "runtime/smoke.c", "scripts/build_runtime.py",
+                   "scripts/runtime_common.py", "scripts/build_input_release.py",
+                   ".github/workflows/runtime.yml")
+
+
+def input_fingerprint() -> str:
+    identities = []
+    for name in PRODUCER_INPUTS:
+        blob = subprocess.check_output(["git", "rev-parse", f"HEAD:{name}"], cwd=ROOT, text=True).strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", blob):
+            raise ValueError(f"producer input is not committed: {name}")
+        identities.append(f"{name}\0{blob}\n")
+    return hashlib.sha256("".join(identities).encode()).hexdigest()
 
 
 def digest(path: Path) -> str:

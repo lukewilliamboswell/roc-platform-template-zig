@@ -1,15 +1,16 @@
 name: Linker inputs
 
 on:
-  pull_request:
-    paths:
-      - 'linker-inputs/**'
-      - 'runtime/**'
-      - 'scripts/*linker_inputs*.py'
-      - 'scripts/build_runtime.py'
-      - 'scripts/runtime_common.py'
-      - '.github/workflows/linker-inputs.yml'
   workflow_dispatch:
+    inputs:
+      release_candidate:
+        description: Attest the exact candidate selected by the trusted publisher
+        required: true
+        type: boolean
+      expected_sha:
+        description: Exact pull-request head selected by the trusted publisher
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -62,18 +63,30 @@ jobs:
           pattern: linker-inputs-*
       - run: diff -r linker-inputs-1 linker-inputs-2
 
-  publish:
+  assemble:
     needs: [build, reproducibility]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: inputs.release_candidate
+    runs-on: ubuntu-24.04
     permissions:
-      actions: read
-      contents: write
+      contents: read
       id-token: write
       attestations: write
-    # Pinned to the reviewed controller commit; never replace with a moving ref.
-    uses: lukewilliamboswell/roc-automation/.github/workflows/publish-linker-inputs.yml@4ce69c1aa52fbdc950643440f98152e2ecb64e43
-    with:
-      release-tag: linker-inputs-v${{ needs.build.outputs.version }}
-      artifact-name: linker-inputs-1
-      manifest-path: dependency.json
-      release-name: Zig linker inputs ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false, ref: '${{ github.sha }}'}
+      - name: Bind candidate to the publisher-selected commit
+        env: {EXPECTED_SHA: '${{ inputs.expected_sha }}'}
+        run: test -n "$EXPECTED_SHA" && test "$EXPECTED_SHA" = "$GITHUB_SHA"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with: {name: linker-inputs-1, path: aggregate}
+      - run: python3 scripts/build_input_release.py --source aggregate --output release
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: |
+            release/build-input-release.json
+            release/link-inputs-all.tar
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: link-input-release
+          path: release/*
+          if-no-files-found: error

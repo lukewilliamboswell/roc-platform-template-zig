@@ -1,0 +1,23 @@
+name: Publish PR linker inputs
+on:
+  workflow_dispatch:
+    inputs:
+      pull-request:
+        description: Open same-repository PR containing the linker-input change
+        type: string
+        required: true
+permissions: {}
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions: {actions: write, attestations: read, contents: write, pull-requests: read}
+    steps:
+      - uses: lukewilliamboswell/roc-automation/actions/publish-build-inputs@4d4011566d9b50a7b75b3eca868c61de0f5bdd4b
+        env: {GH_TOKEN: '${{ github.token }}'}
+        with:
+          pull-request: ${{ inputs.pull-request }}
+          producer-workflow: linker-inputs.yml
+          candidate-artifact: link-input-release
+          lock-path: link-inputs.lock.json
+          release-prefix: link-inputs

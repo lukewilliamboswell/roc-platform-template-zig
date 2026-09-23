@@ -57,7 +57,7 @@ def read_archive(path: Path) -> tuple[dict, dict[str, bytes]]:
         raise ValueError("Linker-input archive exceeds size limit")
     files: dict[str, bytes] = {}
     total = 0
-    with tarfile.open(path, "r:gz") as tar:
+    with tarfile.open(path, "r:*") as tar:
         for member in tar:
             if not member.isfile() or not safe_name(member.name) or member.name in files:
                 raise ValueError(f"Unsafe or duplicate archive entry: {member.name}")
