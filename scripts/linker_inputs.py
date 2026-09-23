@@ -15,6 +15,9 @@ import urllib.request
 from linker_inputs_common import ROOT, COMMIT, SHA256, digest, read_archive
 
 LOCK = ROOT / "linker-inputs.lock.json"
+if not LOCK.is_file() and (Path.cwd() / "link-inputs.lock.json").is_file():
+    ROOT = Path.cwd()
+    LOCK = ROOT / "link-inputs.lock.json"
 PROVENANCE = "https://slsa.dev/provenance/v1"
 
 
