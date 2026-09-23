@@ -90,11 +90,17 @@ jobs:
           version: nightly-new-compiler
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
+      - name: Read linker-input cache identity
+        id: linker-inputs
+        run: |
+          test -f link-inputs.lock.json
+          printf 'key=%s\n' "$(sha256sum link-inputs.lock.json | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
       - name: Restore content-addressed linker inputs
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: .zig-cache/linker-inputs
-          key: linker-inputs-${{ runner.os }}-${{ hashFiles('linker-inputs.lock.json') }}
+          key: linker-inputs-${{ runner.os }}-${{ steps.linker-inputs.outputs.key }}
       - name: Download a cache miss and verify every cache hit
         env:
           GH_TOKEN: ${{ github.token }}

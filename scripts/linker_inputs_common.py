@@ -5,11 +5,16 @@ import gzip
 import hashlib
 import io
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import tarfile
 
-ROOT = Path(__file__).resolve().parents[1]
+# Git Bash can expose the checked-out script through an MSYS path while the
+# native Windows Python process receives a Windows workspace path. Prefer the
+# runner's explicit workspace so all platforms locate the committed lock.
+ROOT = (Path(os.environ["GITHUB_WORKSPACE"]) if "GITHUB_WORKSPACE" in os.environ
+        else Path(__file__).resolve().parents[1])
 VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 COMMIT = re.compile(r"[0-9a-f]{40}")
