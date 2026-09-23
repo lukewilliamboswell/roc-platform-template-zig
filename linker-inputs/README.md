@@ -25,7 +25,6 @@ manifest-derived content identity and adds only `linker-inputs.lock.json` as a
 signed commit to that PR. Routine PRs only restore or download the locked bytes;
 they never run this producer.
 
-The publisher verifies GitHub provenance at admission. Routine consumers verify
-the committed size and SHA-256 even on cache hits and make no network request for
-a valid cached archive. The existing SemVer lock remains a staged compatibility
-read until the first publisher-generated lock lands; it must then be removed.
+The publisher verifies GitHub provenance at admission. Routine consumers require
+its generated lock, verify the committed size and SHA-256 even on cache hits, and
+make no network request for a valid cached archive.

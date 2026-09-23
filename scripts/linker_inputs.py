@@ -15,6 +15,9 @@ import urllib.request
 from linker_inputs_common import ROOT, COMMIT, SHA256, digest, read_archive
 
 LOCK = ROOT / "linker-inputs.lock.json"
+if not LOCK.is_file() and (Path.cwd() / "link-inputs.lock.json").is_file():
+    ROOT = Path.cwd()
+    LOCK = ROOT / "link-inputs.lock.json"
 PROVENANCE = "https://slsa.dev/provenance/v1"
 
 
@@ -22,9 +25,8 @@ def load_lock() -> dict:
     if not LOCK.is_file():
         raise ValueError("No aggregate linker-input release is pinned yet; see linker-inputs/README.md")
     lock = json.loads(LOCK.read_text())
-    if lock.get("schema_version") == 1:
-        record, source = lock.get("targets", {}).get("all", {}), lock.get("source", {})
-        if (set(lock) != {"schema_version", "kind", "repository", "release", "manifest", "source", "targets"}
+    record, source = lock.get("targets", {}).get("all", {}), lock.get("source", {})
+    if (set(lock) != {"schema_version", "kind", "repository", "release", "manifest", "source", "targets"}
                 or lock.get("kind") != "roc-zig-link-inputs"
                 or lock.get("repository") != "lukewilliamboswell/roc-platform-template-zig"
                 or not re.fullmatch(r"link-inputs-sha256-[0-9a-f]{64}", lock.get("release", ""))
@@ -36,29 +38,11 @@ def load_lock() -> dict:
                 or source.get("workflow") != lock["repository"] + "/.github/workflows/linker-inputs.yml"
                 or COMMIT.fullmatch(source.get("sha", "")) is None
                 or SHA256.fullmatch(source.get("input_fingerprint", "")) is None):
-            raise ValueError("Invalid content-addressed linker-input lock")
-        return {"content": True, "repository": lock["repository"], "tag": lock["release"],
-                "url": f"https://github.com/{lock['repository']}/releases/download/{lock['release']}/{record['asset']}",
-                "sha256": record["sha256"], "size": record["size"], "source_commit": source["sha"],
-                "input_fingerprint": source["input_fingerprint"]}
-    required = {"schema", "repository", "tag", "url", "sha256", "size", "sbom_sha256",
-                "source_commit", "signer_repository", "signer_commit", "workflow", "source_ref",
-                "input_fingerprint"}
-    if (set(lock) != required or lock["schema"] != 1 or SHA256.fullmatch(lock["sha256"]) is None
-            or SHA256.fullmatch(lock["sbom_sha256"]) is None or SHA256.fullmatch(lock["input_fingerprint"]) is None
-            or COMMIT.fullmatch(lock["source_commit"]) is None or COMMIT.fullmatch(lock["signer_commit"]) is None
-            or not isinstance(lock["size"], int) or lock["size"] <= 0
-            or re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", lock["repository"]) is None
-            or lock["signer_repository"] != "lukewilliamboswell/roc-automation"
-            or re.fullmatch(r"linker-inputs-v[0-9]+\.[0-9]+\.[0-9]+", lock["tag"]) is None
-            or lock["source_ref"] != "refs/heads/main"
-            or lock["workflow"] != "lukewilliamboswell/roc-automation/.github/workflows/publish-linker-inputs.yml"):
-        raise ValueError("Invalid linker-input lock")
-    version = lock["tag"].removeprefix("linker-inputs-v")
-    expected = f"https://github.com/{lock['repository']}/releases/download/{lock['tag']}/roc-zig-linker-inputs-{version}.tar.gz"
-    if lock["url"] != expected:
-        raise ValueError("Linker-input URL does not match the locked release")
-    return lock
+        raise ValueError("Invalid content-addressed linker-input lock")
+    return {"content": True, "repository": lock["repository"], "tag": lock["release"],
+            "url": f"https://github.com/{lock['repository']}/releases/download/{lock['release']}/{record['asset']}",
+            "sha256": record["sha256"], "size": record["size"], "source_commit": source["sha"],
+            "input_fingerprint": source["input_fingerprint"]}
 
 
 def cache_path(lock: dict) -> Path:

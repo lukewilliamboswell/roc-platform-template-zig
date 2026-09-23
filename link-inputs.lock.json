@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "roc-zig-link-inputs",
+  "repository": "lukewilliamboswell/roc-platform-template-zig",
+  "release": "link-inputs-sha256-2df3df339dfb1ad4ae1fad0f382cc100c5b31b3921cdeff939f6aea51457886d",
+  "manifest": {
+    "asset": "build-input-release.json",
+    "sha256": "2df3df339dfb1ad4ae1fad0f382cc100c5b31b3921cdeff939f6aea51457886d"
+  },
+  "source": {
+    "input_fingerprint": "5d5376f62958ab464f51b5facd3b78c7cb2605273b1e7b732e44a7df8e16ddff",
+    "ref": "refs/heads/adopt/content-addressed-linker-inputs",
+    "repository": "lukewilliamboswell/roc-platform-template-zig",
+    "sha": "4051337809b72aedddf87dbcf7d885cdbcf13309",
+    "workflow": "lukewilliamboswell/roc-platform-template-zig/.github/workflows/linker-inputs.yml"
+  },
+  "targets": {
+    "all": {
+      "asset": "link-inputs-all.tar",
+      "sha256": "e54e6ed10fd433f55c9ab9d1b8ff346739b5c9d21f24c833cd0be4785393aef4",
+      "size": 7004160
+    }
+  }
+}

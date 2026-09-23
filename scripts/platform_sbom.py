@@ -6,38 +6,48 @@ from pathlib import Path
 import subprocess
 import sys
 
-from linker_inputs import cache_path, load_lock, check
+from linker_inputs import load_lock, check
 from linker_inputs_common import ROOT, digest
 from runtime_common import write_json
 
 
 def generate(archive: Path, output: Path):
-    check()
+    tree, manifest = check()
     lock = load_lock()
     inventory = json.loads((ROOT / ".zig-cache/platform-bundle.json").read_text())
     if inventory["archive"] != archive.name or inventory["sha256"] != digest(archive) or inventory["linker_inputs"] != lock:
         raise ValueError("SBOM inventory does not match this bundle and linker-input lock")
-    inputs_sbom = json.loads((cache_path(lock) / "linker-inputs.spdx.json").read_text())
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     epoch = int(subprocess.check_output(["git", "show", "-s", "--format=%ct", "HEAD"], cwd=ROOT))
-    packages = inputs_sbom["packages"]
+    packages = [{"SPDXID": "SPDXRef-inputs", "name": "roc-zig-link-inputs",
+                 "versionInfo": manifest["version"], "downloadLocation": lock["url"],
+                 "filesAnalyzed": True, "licenseConcluded": "NOASSERTION",
+                 "licenseDeclared": "NOASSERTION", "copyrightText": "NOASSERTION",
+                 "checksums": [{"algorithm": "SHA256", "checksumValue": lock["sha256"]}]}]
     packages.append({"SPDXID": "SPDXRef-platform", "name": "roc-platform-template-zig", "versionInfo": sha,
                      "downloadLocation": "NOASSERTION", "filesAnalyzed": False, "licenseConcluded": "NOASSERTION",
                      "licenseDeclared": "NOASSERTION", "copyrightText": "NOASSERTION",
                      "checksums": [{"algorithm": "SHA256", "checksumValue": digest(archive)}]})
-    relationships = [r for r in inputs_sbom["relationships"] if r["relationshipType"] != "DESCRIBES"]
-    relationships.extend([
+    relationships = [
         {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-platform"},
         {"spdxElementId": "SPDXRef-platform", "relationshipType": "DEPENDS_ON", "relatedSpdxElement": "SPDXRef-inputs"},
-    ])
-    files = inputs_sbom["files"]
+    ]
+    files = []
+    for index, (name, record) in enumerate(sorted(manifest["files"].items())):
+        ident = f"SPDXRef-input-file-{index}"
+        if digest(tree / name) != record["sha256"]:
+            raise ValueError("Staged linker-input file differs from dependency inventory")
+        files.append({"SPDXID": ident, "fileName": "./" + name,
+                      "checksums": [{"algorithm": "SHA256", "checksumValue": record["sha256"]}],
+                      "licenseConcluded": "NOASSERTION", "licenseInfoInFiles": ["NOASSERTION"],
+                      "copyrightText": "NOASSERTION"})
+        relationships.append({"spdxElementId": "SPDXRef-inputs", "relationshipType": "CONTAINS",
+                              "relatedSpdxElement": ident})
     for index, (name, checksum) in enumerate(sorted(inventory["files"].items())):
         ident = f"SPDXRef-platform-file-{index}"
         files.append({"SPDXID": ident, "fileName": "./" + name, "checksums": [{"algorithm": "SHA256", "checksumValue": checksum}],
                       "licenseConcluded": "NOASSERTION", "licenseInfoInFiles": ["NOASSERTION"], "copyrightText": "NOASSERTION"})
         relationships.append({"spdxElementId": "SPDXRef-platform", "relationshipType": "CONTAINS", "relatedSpdxElement": ident})
-    # Preserve the linker-input release identity, rather than implying its sources were rebuilt here.
-    packages[0]["downloadLocation"] = lock["url"]
     compiler_pin = subprocess.check_output([sys.executable, "scripts/roc_version.py"], cwd=ROOT, text=True).strip()
     for ident, name, version in [("platform-zig", "Zig host compiler", subprocess.check_output(["zig", "version"], text=True).strip()),
                                   ("roc", "Roc bundler", compiler_pin)]:
