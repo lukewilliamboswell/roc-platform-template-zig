@@ -1,5 +1,6 @@
 platform ""
-    requires {} { main! : List(Str) => Try({}, [Exit(I32)]) }
+    # Applications may return their own error tags; main_for_host! reports them.
+    requires {} { main! : List(Str) => Try({}, _) }
     exposes [Stdout, Stderr, Stdin]
     packages { roc: "nightly-2026-09-23-c7852fd" }
     provides { "roc_main": main_for_host! }
