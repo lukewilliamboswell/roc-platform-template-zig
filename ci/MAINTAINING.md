@@ -24,6 +24,30 @@ substitutes the local platform. Keep URLs unchanged in compiler-only updates;
 an incompatible published platform may require a new release and reviewed URL
 update before the compiler update can pass.
 
+## External linker-input changes
+
+`link-inputs.lock.json` selects immutable external linker inputs. This is a
+separate release from the Roc platform bundle below. Changing platform Roc
+source or its compiler pin does not by itself require new linker inputs.
+
+When `linker-inputs/` or another fingerprinted producer input changes:
+
+1. Stage the source and recipe changes in a same-repository PR. Do not edit the
+   lock by hand or run a publishing job from the PR branch.
+2. Review the candidate and its target coverage. From `main`, dispatch
+   **Publish PR linker inputs** with that PR number. The trusted controller
+   dispatches `linker-inputs.yml` at the exact PR head; candidate jobs build,
+   compare two independent outputs, assemble, and attest without release
+   credentials.
+3. The controller verifies the candidate evidence, publishes an immutable
+   linker-input release, then adds only the new lock in a GitHub-signed commit
+   to the PR. Review the release manifest, target archives, hashes, source SHA,
+   and lock diff; rerun the PR checks on that new head before merging.
+
+This publisher does not publish a Roc platform bundle or update application
+URLs. Use the platform release procedure below when platform source or its
+selected inputs change.
+
 ## Release procedure
 
 Dispatch Release on a reviewed `main` commit with a new unprefixed package SemVer
