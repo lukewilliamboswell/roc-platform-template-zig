@@ -48,6 +48,24 @@ This publisher does not publish a Roc platform bundle or update application
 URLs. Use the platform release procedure below when platform source or its
 selected inputs change.
 
+## Nightly blocked by the published platform
+
+A new compiler may accept current source and its candidate bundle while rejecting
+the older bundle pinned by public examples. The linker-input publisher above
+cannot repair that failure: the platform bundle has its own `roc` requirement.
+Keep the public check and immutable URLs intact while reviewing the source and
+compiler-pin candidate, its exact commit, and the full current-source and bundle
+test results.
+
+The current platform release workflow publishes only from `main`. If strict
+required checks prevent merging solely because the old published bundle fails,
+the maintainer must review and explicitly authorize any one-time merge exception
+for that exact candidate. Do not change required checks or enable a standing
+bypass to make the updater green. After a reviewed merge, run the normal `main`
+release workflow, then open a separate reviewed PR updating the example URLs.
+Run the published-example checks against those URLs before treating the compiler
+update as complete.
+
 ## Release procedure
 
 Dispatch Release on a reviewed `main` commit with a new unprefixed package SemVer
