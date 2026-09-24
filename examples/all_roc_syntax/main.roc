@@ -1,4 +1,4 @@
-app [main!] { roc: "nightly-2026-09-12-220fd47", pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst" }
+app [main!] { roc: "nightly-2026-09-23-c7852fd", pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst" }
 
 import pf.Stdout
 import pf.Stdout as StdoutAlias
@@ -95,7 +95,7 @@ multiline_str = |number|
 
 # end name with `!` for effectful functions
 # `=>` shows effectfulness in the type signature
-effect_demo! : Str => Try({}, [StdoutErr(Str), ..])
+effect_demo! : Str => Try({}, [StdoutErr(Str)])
 effect_demo! = |msg|
 	Stdout.line!(msg)
 
@@ -149,7 +149,7 @@ while_loop = |limit| {
 	$sum
 }
 
-print! : _ => Try({}, [StdoutErr(Str), ..])
+print! : _ => Try({}, [StdoutErr(Str)])
 print! = |something| {
 	Stdout.line!(Str.inspect(something))
 }
@@ -318,7 +318,7 @@ letter_to_str = |letter| match letter {
 stringify : a -> Str where [a.to_str : a -> Str]
 stringify = |value| value.to_str()
 
-main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ..])
+main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str)])
 main! = |_args| {
 	Stdout.line!("Hello, world!")?
 	StdoutAlias.line!("Hello, world! (using alias)")?

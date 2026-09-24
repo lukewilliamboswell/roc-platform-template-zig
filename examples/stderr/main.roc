@@ -1,11 +1,11 @@
-app [main!] { roc: "nightly-2026-09-12-220fd47", pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst" }
+app [main!] { roc: "nightly-2026-09-23-c7852fd", pf: platform "https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/download/1.0.0/AnZoxzoGPtSGQ15EQh6pBeeaHJ7aizP9MQhK81dES3Uq.tar.zst" }
 
 import pf.Stdout
 import pf.Stderr
 
 # Demonstrates: Stderr output, both output streams
 
-main! : List(Str) => Try({}, [Exit(I32), StderrErr(Str), StdoutErr(Str), ..])
+main! : List(Str) => Try({}, [Exit(I32), StderrErr(Str), StdoutErr(Str)])
 main! = |_args| {
     # Write to stdout
     Stdout.line!("This message goes to stdout")?
