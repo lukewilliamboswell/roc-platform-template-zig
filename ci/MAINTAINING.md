@@ -24,6 +24,48 @@ substitutes the local platform. Keep URLs unchanged in compiler-only updates;
 an incompatible published platform may require a new release and reviewed URL
 update before the compiler update can pass.
 
+## External linker-input changes
+
+`link-inputs.lock.json` selects immutable external linker inputs. This is a
+separate release from the Roc platform bundle below. Changing platform Roc
+source or its compiler pin does not by itself require new linker inputs.
+
+When `linker-inputs/` or another fingerprinted producer input changes:
+
+1. Stage the source and recipe changes in a same-repository PR. Do not edit the
+   lock by hand or run a publishing job from the PR branch.
+2. Review the candidate and its target coverage. From `main`, dispatch
+   **Publish PR linker inputs** with that PR number. The trusted controller
+   dispatches `linker-inputs.yml` at the exact PR head; candidate jobs build,
+   compare two independent outputs, assemble, and attest without release
+   credentials.
+3. The controller verifies the candidate evidence, publishes an immutable
+   linker-input release, then adds only the new lock in a GitHub-signed commit
+   to the PR. Review the release manifest, target archives, hashes, source SHA,
+   and lock diff; rerun the PR checks on that new head before merging.
+
+This publisher does not publish a Roc platform bundle or update application
+URLs. Use the platform release procedure below when platform source or its
+selected inputs change.
+
+## Nightly blocked by the published platform
+
+A new compiler may accept current source and its candidate bundle while rejecting
+the older bundle pinned by public examples. The linker-input publisher above
+cannot repair that failure: the platform bundle has its own `roc` requirement.
+Keep the public check and immutable URLs intact while reviewing the source and
+compiler-pin candidate, its exact commit, and the full current-source and bundle
+test results.
+
+The current platform release workflow publishes only from `main`. If strict
+required checks prevent merging solely because the old published bundle fails,
+the maintainer must review and explicitly authorize any one-time merge exception
+for that exact candidate. Do not change required checks or enable a standing
+bypass to make the updater green. After a reviewed merge, run the normal `main`
+release workflow, then open a separate reviewed PR updating the example URLs.
+Run the published-example checks against those URLs before treating the compiler
+update as complete.
+
 ## Release procedure
 
 Dispatch Release on a reviewed `main` commit with a new unprefixed package SemVer
