@@ -109,12 +109,12 @@ import sys
 bundle_url, out_dir = sys.argv[1], Path(sys.argv[2])
 source_dir = Path("examples")
 shutil.copytree(source_dir, out_dir, dirs_exist_ok=True)
-pattern = re.compile(r'platform "https://github\.com/lukewilliamboswell/roc-platform-template-zig/releases/download/[^"\n]+"')
+pattern = re.compile(r'platform "[^"\n]+"')
 rewritten = 0
 for source in sorted(source_dir.glob("*/main.roc")):
     text, count = pattern.subn(lambda _: f'platform "{bundle_url}"', source.read_text(), count=1)
     if count != 1:
-        raise SystemExit(f"example does not use a recognized platform URL: {source}")
+        raise SystemExit(f"example does not use a platform to rewrite: {source}")
     (out_dir / source.relative_to(source_dir)).write_text(text, encoding="utf-8")
     rewritten += 1
 if rewritten == 0:

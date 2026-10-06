@@ -133,12 +133,22 @@ jobs:
           echo "Bundle created: $BUNDLE_FILENAME"
           echo "bundle_filename=$BUNDLE_FILENAME" >> "$GITHUB_OUTPUT"
 
+      - name: Package frozen examples for this release
+        if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation
+        env:
+          BUNDLE: ${{ steps.bundle.outputs.bundle_filename }}
+          RELEASE_VERSION: ${{ inputs.release_tag }}
+        run: |
+          python3 scripts/examples_archive.py build \
+            --repo "$GITHUB_REPOSITORY" --version "$RELEASE_VERSION" \
+            --bundle "$BUNDLE" --output "examples-$RELEASE_VERSION.tar.gz"
+
       - name: Generate bundle SBOM and checksums
         env:
           BUNDLE: ${{ steps.bundle.outputs.bundle_filename }}
         run: |
           python3 scripts/platform_sbom.py "$BUNDLE" platform.spdx.json
-          sha256sum "$BUNDLE" platform.spdx.json > SHA256SUMS
+          sha256sum "$BUNDLE" platform.spdx.json $(ls examples-*.tar.gz 2>/dev/null) > SHA256SUMS
 
       - name: Upload bundle artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -148,6 +158,7 @@ jobs:
             ${{ steps.bundle.outputs.bundle_filename }}
             platform.spdx.json
             SHA256SUMS
+            examples-*.tar.gz
           retention-days: 30
 
   test-bundle:
@@ -314,13 +325,14 @@ jobs:
               f"Compiler policy: `{env['COMPILER_CHANNEL']}` (exact nightly bootstrap; no stable compiler support claim).\n\n"
               f"Tested source: `{env['SOURCE_SHA']}`.\n\n"
               f"Platform bundle: {url}\n\n"
+              f"Frozen examples: examples-{env['RELEASE_VERSION']}.tar.gz (headers point at the bundle above).\n\n"
               "SHA-256 digest is attached in SHA256SUMS.\n"
           )
           PYCODE
           # Creating a new ref fails if another publisher claimed this tag.
           gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
             -f "ref=refs/tags/$RELEASE_VERSION" -f "sha=$SOURCE_SHA"
-          gh release create "$RELEASE_VERSION" "$BUNDLE_FILE" SHA256SUMS platform.spdx.json platform-*.sigstore.json \
+          gh release create "$RELEASE_VERSION" "$BUNDLE_FILE" "examples-$RELEASE_VERSION.tar.gz" SHA256SUMS platform.spdx.json platform-*.sigstore.json \
             --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$RELEASE_VERSION" \
             --generate-notes --notes-file release-notes.md
           gh release edit "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --draft=false

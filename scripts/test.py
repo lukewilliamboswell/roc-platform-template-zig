@@ -110,20 +110,22 @@ def case_enabled(source: Path, case: dict[str, object]) -> bool:
     return enabled and platform_enabled
 
 
-def load_spec(examples_dir: Path) -> tuple[dict[str, bool], list[dict[str, object]]]:
-    data = json.loads(SPEC_PATH.read_text(encoding="utf-8"))
+def load_spec(
+    examples_dir: Path, spec_path: Path = SPEC_PATH
+) -> tuple[dict[str, bool], list[dict[str, object]]]:
+    data = json.loads(spec_path.read_text(encoding="utf-8"))
     defaults = data.get("stages")
     apps = data.get("apps")
     if not isinstance(defaults, dict) or set(defaults) != set(STAGES):
-        raise TestFailure(f"{SPEC_PATH}: stages must define {', '.join(STAGES)}")
+        raise TestFailure(f"{spec_path}: stages must define {', '.join(STAGES)}")
     if not all(isinstance(defaults[name], bool) for name in STAGES):
-        raise TestFailure(f"{SPEC_PATH}: all stage defaults must be booleans")
+        raise TestFailure(f"{spec_path}: all stage defaults must be booleans")
     if not isinstance(apps, list) or not all(isinstance(app, dict) for app in apps):
-        raise TestFailure(f"{SPEC_PATH}: apps must be an array of objects")
+        raise TestFailure(f"{spec_path}: apps must be an array of objects")
 
     paths = [app.get("path") for app in apps]
     if not all(isinstance(path, str) for path in paths) or len(paths) != len(set(paths)):
-        raise TestFailure(f"{SPEC_PATH}: every app needs a unique string path")
+        raise TestFailure(f"{spec_path}: every app needs a unique string path")
 
     discovered = {
         (Path("examples") / path.relative_to(examples_dir)).as_posix()
@@ -329,9 +331,9 @@ def run_case(
 
 
 def run_suite(
-    examples_dir: Path, operation: str, *, verbose: bool
+    examples_dir: Path, operation: str, *, verbose: bool, spec_path: Path = SPEC_PATH
 ) -> dict[str, int]:
-    defaults, apps = load_spec(examples_dir)
+    defaults, apps = load_spec(examples_dir, spec_path)
     selected = {
         "all": set(STAGES),
         "validate": {"check", "test"},
@@ -405,6 +407,7 @@ def main() -> None:
         description="Validate, build, and run the platform examples from a shared test spec"
     )
     parser.add_argument("--examples-dir", type=Path, default=ROOT / "examples")
+    parser.add_argument("--spec", type=Path, default=SPEC_PATH)
     parser.add_argument(
         "--operation",
         choices=("all", "validate", "build", "run"),
@@ -424,7 +427,9 @@ def main() -> None:
 
     version = subprocess.check_output(["roc", "version"], text=True).strip()
     print(f"Using {version}")
-    counts = run_suite(examples_dir, args.operation, verbose=args.verbose)
+    counts = run_suite(
+        examples_dir, args.operation, verbose=args.verbose, spec_path=args.spec.resolve()
+    )
     completed = ", ".join(
         f"{stage}: {count}" for stage, count in counts.items() if count > 0
     )

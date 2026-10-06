@@ -124,7 +124,9 @@ jobs:
           version: nightly-new-compiler
           nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
 
-      - name: Test committed release URLs with a fresh cache
+      - name: Test the latest release's frozen examples with a fresh cache
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python3 scripts/test_published_examples.py
 
   ci-required:
