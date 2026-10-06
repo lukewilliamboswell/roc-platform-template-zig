@@ -336,7 +336,16 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$RELEASE_VERSION" \
             --generate-notes --notes-file release-notes.md
           gh release edit "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --draft=false
-          gh release verify "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY"
+          # GitHub creates the release attestation asynchronously after publication.
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if gh release verify "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY"; then
+              exit 0
+            fi
+            echo "Release attestation not available yet (attempt $attempt); waiting"
+            sleep 10
+          done
+          echo "Release attestation never became verifiable" >&2
+          exit 1
 
   deploy-docs:
     name: Deploy Docs to GitHub Pages
