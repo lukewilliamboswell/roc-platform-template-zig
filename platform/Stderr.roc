@@ -5,7 +5,7 @@ Stderr := [].{
     ## Write the given string to standard error, followed by a newline.
     ##
     ## Returns `Err(StderrErr(message))` if the host cannot write to stderr.
-    line! : Str => Try({}, [StderrErr(Str), ..])
+    line! : Str => Try({}, [StderrErr(Str)])
     line! = |message|
         match Host.stderr_line!(message) {
             Ok({}) => Ok({})
