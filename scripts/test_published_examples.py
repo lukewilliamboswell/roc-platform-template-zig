@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the frozen examples from the latest platform release with an isolated cache.
+"""Run the frozen examples from the highest SemVer platform release with an isolated cache.
 
 The archive and its release platform URL are used unmodified; only the compiler pin
 in temporary copies follows the current selection, so a compiler update is checked
@@ -7,6 +7,7 @@ against what users actually downloaded.
 """
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -18,15 +19,25 @@ root = Path(__file__).resolve().parents[1]
 
 
 def latest_examples_asset() -> tuple[str, str]:
+    """Pick the highest platform release; other release streams share this repository."""
     repo = os.environ.get("GITHUB_REPOSITORY", "lukewilliamboswell/roc-platform-template-zig")
     request = urllib.request.Request(
-        f"https://api.github.com/repos/{repo}/releases/latest",
+        f"https://api.github.com/repos/{repo}/releases?per_page=100",
         headers={"Accept": "application/vnd.github+json"},
     )
     if token := os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"):
         request.add_header("Authorization", f"Bearer {token}")
     with urllib.request.urlopen(request, timeout=30) as response:
-        release = json.load(response)
+        releases = json.load(response)
+    versions = [
+        (tuple(map(int, m.groups())), release)
+        for release in releases
+        if not release["draft"] and not release["prerelease"]
+        if (m := re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", release["tag_name"]))
+    ]
+    if not versions:
+        raise SystemExit("No platform release with a SemVer tag was found")
+    _, release = max(versions, key=lambda item: item[0])
     for asset in release["assets"]:
         if asset["name"].startswith("examples-") and asset["name"].endswith(".tar.gz"):
             return release["tag_name"], asset["browser_download_url"]
