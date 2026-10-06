@@ -42,7 +42,7 @@ zig build docs
 
 ## Testing
 
-The checked-in examples pin a published release bundle so they can be copied directly. `zig build test` rewrites temporary copies to use the local `platform/main.roc` before running them.
+The checked-in examples reference the platform by relative path (`../../platform/main.roc`), so `zig build test` exercises the source in this checkout directly. Each release also attaches a frozen `examples-VERSION.tar.gz` whose application headers point at that release's immutable bundle URL; copy examples from there to start a project.
 
 [`scripts/test_spec.json`](scripts/test_spec.json) is the source of truth for example coverage. Every example has one entry and can define any number of named cases. A case can provide command-line arguments, stdin, environment variables, an expected exit code, and combined or stream-specific output assertions. The runner builds each example once and reuses that binary for all of its cases on Linux, macOS, and Windows.
 
@@ -54,7 +54,7 @@ All test stages passed (check: 12, test: 2, build: 12, run: 17)
 Run the spec directly against another examples directory or only selected stages:
 
 ```bash
-python3 scripts/test_published_examples.py  # committed URLs, fresh cache
+python3 scripts/test_published_examples.py  # latest release's frozen examples, fresh cache
 python3 scripts/test.py --operation validate
 python3 scripts/test.py --operation run
 ```
@@ -115,8 +115,9 @@ be built from the platform source in this checkout and are not release inputs.
 
 ## Maintenance and releases
 
-`main` tracks an exact nightly. The updater advances the platform and all public
-example compiler headers together, preserving released platform URLs. CI has
+`main` tracks an exact nightly. The updater advances the platform and all example
+compiler headers together. Published-example validation runs the latest release's frozen
+examples against its released bundle, changing only the compiler pin in temporary copies. CI has
 separate **Published examples** and **Current source** jobs; release validation
 also tests the exact proposed archive. A compiler update must pass all three.
 Automatic merging is disabled; compiler compatibility failures need review.

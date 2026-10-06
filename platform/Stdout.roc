@@ -5,7 +5,7 @@ Stdout := [].{
     ## Write the given string to standard output, followed by a newline.
     ##
     ## Returns `Err(StdoutErr(message))` if the host cannot write to stdout.
-    line! : Str => Try({}, [StdoutErr(Str), ..])
+    line! : Str => Try({}, [StdoutErr(Str)])
     line! = |message|
         match Host.stdout_line!(message) {
             Ok({}) => Ok({})

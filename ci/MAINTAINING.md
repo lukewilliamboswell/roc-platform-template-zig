@@ -14,15 +14,15 @@ lists paths, not another copy of the compiler version.
 
 | Lane | Command | Input |
 | --- | --- | --- |
-| Published examples | `python3 scripts/test_published_examples.py` | Committed application folders and immutable release URLs, isolated caches |
-| Current source | `bash ci/all_tests.sh` | Current host and platform, temporary application copies |
+| Published examples | `python3 scripts/test_published_examples.py` | The latest release's frozen `examples-*.tar.gz` and its immutable bundle URL, isolated caches; only the compiler pin is replaced in temporary copies |
+| Current source | `bash ci/all_tests.sh` | Current host and platform; repository examples reference `../../platform/main.roc` |
 | Release archive | `bash ci/test_bundled_examples.sh PATH_TO_BUNDLE` | Exact proposed archive served over loopback, temporary application copies |
 
 Each lane checks, tests, builds and executes the cases in `scripts/test_spec.json`.
-Companion modules are copied with each application. Public validation never
-substitutes the local platform. Keep URLs unchanged in compiler-only updates;
-an incompatible published platform may require a new release and reviewed URL
-update before the compiler update can pass.
+Companion modules are copied with each application. Published validation never
+substitutes the local platform or rewrites the release URL. Compiler-only updates
+advance metadata, not the platform release; an incompatible released platform
+needs a repaired release, which publishes its own frozen examples.
 
 ## External linker-input changes
 
@@ -62,9 +62,8 @@ required checks prevent merging solely because the old published bundle fails,
 the maintainer must review and explicitly authorize any one-time merge exception
 for that exact candidate. Do not change required checks or enable a standing
 bypass to make the updater green. After a reviewed merge, run the normal `main`
-release workflow, then open a separate reviewed PR updating the example URLs.
-Run the published-example checks against those URLs before treating the compiler
-update as complete.
+release workflow. It publishes a new frozen examples archive, which the
+published-example check then uses; no example-URL PR is needed.
 
 ## Release procedure
 
@@ -77,20 +76,18 @@ Never move an existing tag or replace a released archive. If publication partial
 succeeds, inspect the tag and assets and prepare a reviewed recovery; do not
 blindly rerun publication.
 
-Release follow-ups remain manual:
-
-1. Prepare a separate branch updating example platform URLs and README release
-   links to the published asset. Preserve compiler pins and companion modules.
-2. Run published-example validation against those actual URLs from a fresh cache.
-   A starter download, when provided, must include complete application folders,
-   pinned headers and compiler installation instructions; test its extracted files.
-3. Open a signed, reviewed follow-up PR and verify checks on its current commit.
-   A bot-created PR may need approval to start workflows; a green workflow dispatch
-   alone does not satisfy unrelated required PR checks.
+The release also attaches `examples-VERSION.tar.gz`: complete application folders
+and the matching `test_spec.json`, with each header pointing at that release's
+immutable bundle URL and the publication compiler. Repository examples keep the
+relative path `../../platform/main.roc` and are never edited after a release, so
+there is no example-URL follow-up PR. Never replace an archive on an existing
+release; a repair is a new release. The next CI run on any branch validates the
+latest release's archive from a fresh cache. Check that the archive downloads
+and its digest is in `SHA256SUMS`.
 
 Rendered docs are ignored build output and deployed through Pages artifacts.
 The existing site publishes one unversioned API snapshot. Versioned documentation,
-downloadable starter generation, and automated signed release follow-up PRs are
+and a user-facing starter generator beyond the frozen archive are
 not implemented yet; preserve historical URLs when introducing versioned docs.
 There is no automatic backport, stable compiler update, promotion or LTS policy.
 
