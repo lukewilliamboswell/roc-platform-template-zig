@@ -48,7 +48,7 @@ jobs:
           VERSION=$(python3 -c 'import json; print(json.load(open("linker-inputs/sources.json"))["version"])')
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linker-inputs-${{ matrix.copy }}
           path: .zig-cache/linker-inputs-dist/*
@@ -85,7 +85,7 @@ jobs:
           subject-path: |
             release/build-input-release.json
             release/link-inputs-all.tar
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: link-input-release
           path: release/*
