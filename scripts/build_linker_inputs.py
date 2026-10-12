@@ -30,7 +30,12 @@ WINDOWS_IMPORTS = (
     "api-ms-win-crt-utility-l1-1-0.lib", "advapi32.lib", "kernel32.lib", "ntdll.lib",
     "shell32.lib", "user32.lib",
 )
-WINDOWS_FILES = WINDOWS_IMPORTS
+MSVC_RUNTIME = ROOT / "linker-inputs/msvc-runtime"
+MSVC_RUNTIME_SOURCES = ("exe_startup.zig", "initializers.zig", "tls.zig")
+# Zig names an archive member after the object it compiled; these are the stable names.
+MSVC_RUNTIME_MEMBERS = ("exe_startup_zcu.obj", "tls.obj", "compiler_rt.obj")
+WINDOWS_RUNTIME = "msvc_runtime.lib"
+WINDOWS_FILES = (WINDOWS_RUNTIME, *WINDOWS_IMPORTS)
 
 
 def run(args: list[object], **kwargs):
@@ -88,6 +93,52 @@ def audit_macos_catalog(zig: Path, work: Path, nm: str) -> None:
                          + repr(sorted(set(catalog["symbols"]) - unresolved)))
 
 
+def msvc_runtime(zig: Path, work: Path, env: dict[str, str]) -> bytes:
+    """Build the MSVC-ABI startup archive: the entry point lld-link infers for a
+    console program, the TLS directory and compiler-rt, one archive member each."""
+    upstream = json.loads((MSVC_RUNTIME / "UPSTREAM.json").read_text())
+    if set(upstream["files"]) != set(MSVC_RUNTIME_SOURCES):
+        raise ValueError("Unexpected MSVC runtime sources")
+    build = work / "msvc-runtime"
+    build.mkdir()
+    for name in MSVC_RUNTIME_SOURCES:
+        data = (MSVC_RUNTIME / name).read_bytes()
+        if digest_bytes(data) != upstream["files"][name]:
+            raise ValueError("Vendored MSVC runtime source differs from UPSTREAM.json: " + name)
+        (build / name).write_bytes(data)
+    # -j1: Zig numbers a local `__anon_N` symbol by the compiler thread that made it.
+    common = ["-target", "x86_64-windows-msvc", "-O", "ReleaseFast", "-fstrip", "-fno-stack-check", "-j1"]
+    run([zig, "build-obj", "tls.zig", *common, "-femit-bin=tls.obj"], cwd=build, env=env)
+    run([zig, "build-lib", "exe_startup.zig", "tls.obj", *common, "-fcompiler-rt",
+         "-femit-bin=unnormalized.lib"], cwd=build, env=env)
+    # Zig's archive names its members by cache path; rebuild it with stable names.
+    members = {member.replace("\\", "/").rsplit("/", 1)[-1]: member for member in
+               subprocess.check_output([zig, "ar", "t", "unnormalized.lib"], text=True, cwd=build).splitlines()}
+    if set(members) != set(MSVC_RUNTIME_MEMBERS):
+        raise ValueError("Unexpected MSVC runtime archive members: " + ", ".join(sorted(members)))
+    objects = build / "objects"
+    objects.mkdir()
+    for name in MSVC_RUNTIME_MEMBERS:
+        (objects / name).write_bytes(subprocess.check_output([zig, "ar", "pP", "unnormalized.lib", members[name]], cwd=build))
+    run([zig, "ar", "--format=coff", "rcsD", WINDOWS_RUNTIME, *MSVC_RUNTIME_MEMBERS], cwd=objects)
+    return (objects / WINDOWS_RUNTIME).read_bytes()
+
+
+def check_windows_link(zig: Path, work: Path, env: dict[str, str], files: dict[str, bytes]) -> None:
+    """Link the template host the way Roc does for x64win: only the listed inputs,
+    nothing from the machine, and the entry point left for lld-link to infer."""
+    link = work / "windows-link"
+    link.mkdir()
+    for name, data in files.items():
+        (link / name.rsplit("/", 1)[-1]).write_bytes(data)
+    run([zig, "build-lib", ROOT / "src/host.zig", "-target", "x86_64-windows-msvc", "-O", "ReleaseSafe",
+         "-fcompiler-rt", "-femit-bin=host.lib"], cwd=link, env=env)
+    run([zig, "cc", "-target", "x86_64-windows-msvc", "-O2", "-g0", "-nostdinc", "-c", "-x", "c", "-", "-o", "app.obj"],
+        input="int roc_main(void) { return 0; }\n", text=True, cwd=link, env=env)
+    run([zig, "lld-link", "/nodefaultlib", "/subsystem:console", "/machine:x64", "/opt:ref", "/out:probe.exe",
+         "/wholearchive:host.lib", "app.obj", *WINDOWS_FILES], cwd=link, env=env)
+
+
 def windows_files(zig: Path, work: Path) -> dict[str, bytes]:
     target_work = work / "windows"
     target_work.mkdir()
@@ -96,12 +147,13 @@ def windows_files(zig: Path, work: Path) -> dict[str, bytes]:
     result = run([zig, "cc", "-target", "x86_64-windows-gnu", "-O2", "-g0", "-fno-sanitize=all",
                   "-x", "c", "-", "-o", target_work / "probe.exe", "-v"],
                  input="int main(void) { return 0; }\n", text=True, capture_output=True, env=env, cwd=work)
-    found = locate(result.stderr, WINDOWS_FILES, work)
-    output: dict[str, bytes] = {}
+    found = locate(result.stderr, WINDOWS_IMPORTS, work)
+    output: dict[str, bytes] = {"targets/x64win/" + WINDOWS_RUNTIME: msvc_runtime(zig, target_work, env)}
     for name, source in found.items():
         destination = target_work / ("normalized-" + name)
         shutil.copyfile(source, destination)
         output["targets/x64win/" + name] = destination.read_bytes()
+    check_windows_link(zig, target_work, env, output)
     return output
 
 
@@ -157,6 +209,8 @@ def build(output: Path) -> None:
         payload.update(windows_files(zig, work))
         mingw_notice = zig.parent / "lib/libc/mingw/COPYING"
         payload["licenses/mingw-w64.txt"] = mingw_notice.read_bytes()
+        payload["licenses/roc.txt"] = (MSVC_RUNTIME / "LICENSE.roc.txt").read_bytes()
+        payload["sources/msvc-runtime-UPSTREAM.json"] = (MSVC_RUNTIME / "UPSTREAM.json").read_bytes()
         stub, catalog, provenance = macos_stub()
         for target in ("x64mac", "arm64mac"):
             payload[f"targets/{target}/libSystem.tbd"] = stub

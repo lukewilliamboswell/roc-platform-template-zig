@@ -93,7 +93,7 @@ def sbom(stage: Path, manifest: dict, archive: Path, epoch: int) -> dict:
         ("zig", "Zig compiler distribution", manifest["sources"]["zig_version"], "NOASSERTION"),
     ]:
         packages.append({"SPDXID": f"SPDXRef-{ident}", "name": name, "versionInfo": ver,
-                         "downloadLocation": "https://ziglang.org/download/0.16.0/" if ident != "runtime" else "NOASSERTION",
+                         "downloadLocation": f"https://ziglang.org/download/{manifest['sources']['zig_version']}/" if ident != "runtime" else "NOASSERTION",
                          "filesAnalyzed": False, "licenseConcluded": "NOASSERTION", "licenseDeclared": license_name,
                          "copyrightText": "NOASSERTION"})
     compiler = manifest["sources"]["toolchains"][manifest["builder_platform"]]
@@ -145,7 +145,10 @@ def build(output: Path):
             target_out.mkdir(parents=True)
             # stdin has stable contents and no absolute source path. -g0 avoids debug paths.
             flags = ["cc", "-target", target, "-mcpu=" + lock["cpu"], "-static", lock["optimization"], "-g0"]
-            result = run([zig, *flags, "-x", "c", "-", "-o", work / f"probe-{name}", "-v"],
+            # Zig numbers a local `__anon_N` symbol by the compiler thread that made
+            # it, so the libraries it compiles differ between runs unless it has one
+            # thread. `zig cc` takes no job limit; one CPU gives it one thread.
+            result = run(["taskset", "-c", "0", zig, *flags, "-x", "c", "-", "-o", work / f"probe-{name}", "-v"],
                          input="int main(void) { return 0; }\n", text=True, capture_output=True, env=env, cwd=work)
             commands[name] = ["zig", *flags, "-x", "c", "-", "-o", "probe", "-v"]
             for filename, source in link_inputs(result.stderr, cache).items():
