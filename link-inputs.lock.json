@@ -2,23 +2,23 @@
   "schema_version": 1,
   "kind": "roc-zig-link-inputs",
   "repository": "lukewilliamboswell/roc-platform-template-zig",
-  "release": "link-inputs-sha256-2df3df339dfb1ad4ae1fad0f382cc100c5b31b3921cdeff939f6aea51457886d",
+  "release": "link-inputs-sha256-2889e4c509a3a247cb2d38ae1400ea71f87ec79c6d6cec58cd7a953e051bdf08",
   "manifest": {
     "asset": "build-input-release.json",
-    "sha256": "2df3df339dfb1ad4ae1fad0f382cc100c5b31b3921cdeff939f6aea51457886d"
+    "sha256": "2889e4c509a3a247cb2d38ae1400ea71f87ec79c6d6cec58cd7a953e051bdf08"
   },
   "source": {
-    "input_fingerprint": "5d5376f62958ab464f51b5facd3b78c7cb2605273b1e7b732e44a7df8e16ddff",
-    "ref": "refs/heads/adopt/content-addressed-linker-inputs",
+    "input_fingerprint": "a0a3a4bd00e19228089ae1fcab72f5760e75d373a994db82c391f27560283001",
+    "ref": "refs/heads/windows-startup-inputs",
     "repository": "lukewilliamboswell/roc-platform-template-zig",
-    "sha": "4051337809b72aedddf87dbcf7d885cdbcf13309",
+    "sha": "5db8f9b9e661f5cbde0254d3520366ef4eab8bd4",
     "workflow": "lukewilliamboswell/roc-platform-template-zig/.github/workflows/linker-inputs.yml"
   },
   "targets": {
     "all": {
       "asset": "link-inputs-all.tar",
-      "sha256": "e54e6ed10fd433f55c9ab9d1b8ff346739b5c9d21f24c833cd0be4785393aef4",
-      "size": 7004160
+      "sha256": "a057de193f8c1f6e7f3bfc6f1999853e6c2a868567913af9384d7ecb99c5462a",
+      "size": 8253440
     }
   }
 }
