@@ -6,9 +6,27 @@ archives remain products of the current platform source and are deliberately
 excluded.
 
 The release archive is deterministic and includes Linux musl/Zig runtime files,
-x86-64 MinGW runtime and system import archives, and a project-authored dual-arch
+the x86-64 Windows inputs described below, and a project-authored dual-arch
 TAPI v4 `libSystem.tbd`. The latter is generated only from the reviewed catalog;
 the build does not read an Apple SDK.
+
+Roc links an `x64win` executable from the inputs the platform lists and takes
+nothing from the machine: no Windows SDK, no Visual Studio, no default
+libraries. The archive supplies both kinds of input that needs:
+
+- `msvc_runtime.lib`, built here for `x86_64-windows-msvc`: the `mainCRTStartup`
+  entry point, which gets `argc` and `argv` from the Universal CRT and calls the
+  host's C `main`; the TLS directory; and Zig's compiler-rt. Its three source
+  files are in [`msvc-runtime/`](msvc-runtime), copied unchanged from the Roc
+  commit that [`UPSTREAM.json`](msvc-runtime/UPSTREAM.json) records with their
+  SHA-256 values. The producer refuses a file that differs.
+- Import archives for the Universal CRT that ships with Windows and for
+  `kernel32`, `ntdll`, `advapi32`, `shell32` and `user32`, as Zig generates them
+  from its mingw-w64 definitions. They name DLL exports and hold no code.
+
+The producer then links the host of this checkout against exactly those files,
+with `/nodefaultlib` and no `/entry`, so a missing symbol stops the build before
+anything is released.
 
 Build twice and compare the outputs:
 

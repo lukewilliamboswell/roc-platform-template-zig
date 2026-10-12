@@ -6,7 +6,9 @@ from pathlib import Path
 from linker_inputs_common import ROOT, read_archive
 
 INPUTS = ("linker-inputs/sources.json", "linker-inputs/macos-interfaces/libSystem.json",
-          "linker-inputs/macos-interfaces/PROVENANCE.md", "runtime/sources.json",
+          "linker-inputs/macos-interfaces/PROVENANCE.md", "linker-inputs/msvc-runtime/UPSTREAM.json",
+          "linker-inputs/msvc-runtime/exe_startup.zig", "linker-inputs/msvc-runtime/initializers.zig",
+          "linker-inputs/msvc-runtime/tls.zig", "linker-inputs/msvc-runtime/LICENSE.roc.txt", "runtime/sources.json",
           "scripts/build_linker_inputs.py", "scripts/linker_inputs_common.py",
           "scripts/build_input_release.py", ".github/workflows/linker-inputs.yml")
 

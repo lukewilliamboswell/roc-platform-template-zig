@@ -9,7 +9,7 @@ A template for building [Roc platforms](https://www.roc-lang.org/platforms) usin
 
 ## Requirements
 
-- [Zig](https://ziglang.org/download/) 0.16.0 or later
+- [Zig](https://ziglang.org/download/) 0.17.0
 - [Roc](https://github.com/roc-lang/nightlies/releases): install the exact nightly named by the `roc` field in the application header. The platform header declares the development compiler.
 
 ## Examples
@@ -105,7 +105,7 @@ This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host l
 | arm64musl | `platform/targets/arm64musl/libhost.a` |
 | arm64v1musl | `platform/targets/arm64v1musl/libhost.a` |
 
-Linux musl targets include verified runtime files (`crt1.o`, `libc.a`, `libzigc.a`, `libcompiler_rt.a`) for standalone executables. The `v1` targets use each architecture's baseline instruction set for CPUs without the features required by the default targets.
+Linux musl targets include verified runtime files (`crt1.o`, `libc.a`, `libzigc.a`, `libcompiler_rt.a`) for standalone executables. The Windows target includes a startup archive (`msvc_runtime.lib`) and import archives for the Universal CRT and system DLLs, so linking needs no Windows SDK or Visual Studio. The `v1` targets use each architecture's baseline instruction set for CPUs without the features required by the default targets.
 
 ARM64 Windows is intentionally not advertised: release validation cannot yet
 execute that target natively. External linker inputs use the single signed,

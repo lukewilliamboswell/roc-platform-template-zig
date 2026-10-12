@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "version": "1.0.0",
-  "zig_version": "0.16.0",
+  "version": "1.1.0",
+  "zig_version": "0.17.0",
   "runtime_sources": "../runtime/sources.json",
   "targets": {
     "linux": ["x64musl", "arm64musl"],
@@ -9,5 +9,7 @@
     "windows": ["x64win"]
   },
   "macos_interface": "macos-interfaces/libSystem.json",
-  "windows_target": "x86_64-windows-gnu"
+  "windows_target": "x86_64-windows-gnu",
+  "windows_runtime": "msvc-runtime/UPSTREAM.json",
+  "windows_runtime_target": "x86_64-windows-msvc"
 }

@@ -1,12 +1,14 @@
+import hashlib
 import io
 import json
 from pathlib import Path
+import re
 import tarfile
 import tempfile
 import unittest
 
-from linker_inputs_common import digest_bytes, json_bytes, read_archive, write_archive
-from build_linker_inputs import macos_stub
+from linker_inputs_common import ROOT, digest_bytes, json_bytes, read_archive, write_archive
+from build_linker_inputs import MSVC_RUNTIME, MSVC_RUNTIME_SOURCES, WINDOWS_FILES, WINDOWS_RUNTIME, macos_stub
 from linker_inputs import attest_args
 
 
@@ -54,6 +56,23 @@ class LinkerInputTests(unittest.TestCase):
         self.assertIn(b"x86_64-macos, arm64-macos", stub)
         self.assertIn(b"project-authored", provenance)
         self.assertEqual(json.loads(catalog)["install_name"], "/usr/lib/libSystem.B.dylib")
+
+    def test_windows_header_lists_exactly_the_released_inputs_after_the_app(self):
+        header = (ROOT / "platform/main.roc").read_text()
+        listed = re.search(r"x64win: \{ inputs: \[(.*?)\] \}", header, re.DOTALL).group(1)
+        inputs = [item.strip().strip('"') for item in listed.split(",") if item.strip()]
+        # The host is loaded whole and comes first; what follows the app is searched as needed.
+        self.assertEqual(inputs[:3], ["host.lib", "app", WINDOWS_RUNTIME])
+        self.assertEqual(sorted(inputs[2:]), sorted(WINDOWS_FILES))
+
+    def test_vendored_msvc_runtime_matches_its_recorded_upstream(self):
+        upstream = json.loads((MSVC_RUNTIME / "UPSTREAM.json").read_text())
+        self.assertRegex(upstream["commit"], r"^[0-9a-f]{40}$")
+        self.assertEqual(sorted(upstream["files"]), sorted(MSVC_RUNTIME_SOURCES))
+        for name, sha256 in upstream["files"].items():
+            self.assertEqual(hashlib.sha256((MSVC_RUNTIME / name).read_bytes()).hexdigest(), sha256)
+        notice = upstream["license_file"]
+        self.assertEqual(hashlib.sha256((MSVC_RUNTIME / notice["vendored_as"]).read_bytes()).hexdigest(), notice["sha256"])
 
     def test_online_attestation_is_bound_to_reusable_signer(self):
         lock = {"repository": "owner/platform", "signer_repository": "owner/automation",
