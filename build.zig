@@ -78,27 +78,15 @@ const all_targets = [_]RocTarget{
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
-    // Cleanup step: remove only generated host library files (preserve libc.a, crt1.o, etc.)
-    const cleanup_step = b.step("clean", "Remove all built library files");
-    for (all_targets) |roc_target| {
-        cleanup_step.dependOn(&CleanupStep.create(b, b.path(
-            b.pathJoin(&.{ "platform", "targets", roc_target.targetDir(), roc_target.libFilename() }),
-        )).step);
-    }
-    cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/libhost.a")).step);
-    cleanup_step.dependOn(&CleanupStep.create(b, b.path("platform/host.lib")).step);
-
     const runtime_stage = b.addSystemCommand(&.{ "python3", "scripts/linker_inputs.py", "stage" });
 
-    // Default step: build for all targets (with cleanup first)
+    // Default step: build for all targets
     const all_step = b.getInstallStep();
-    all_step.dependOn(cleanup_step);
 
     // Create copy step for all targets
     const copy_all = b.addUpdateSourceFiles();
     all_step.dependOn(&copy_all.step);
     copy_all.step.dependOn(&runtime_stage.step);
-    copy_all.step.dependOn(cleanup_step);
 
     // Build for each Roc target
     for (all_targets) |roc_target| {
@@ -112,9 +100,8 @@ pub fn build(b: *std.Build) void {
         );
     }
 
-    // Native step: build only for the current platform (with full cleanup first)
+    // Native step: build only for the current platform
     const native_step = b.step("native", "Build host library for native platform only");
-    native_step.dependOn(cleanup_step);
 
     const native_target = b.standardTargetOptions(.{});
 
@@ -181,9 +168,8 @@ pub fn build(b: *std.Build) void {
     run_integration.step.dependOn(&copy_native.step);
     // Run integration after unit tests
     run_integration.step.dependOn(&run_host_tests.step);
-    // Pass through args (e.g. --verbose)
-    if (b.args) |args| {
-        run_integration.addArgs(args);
+    if (b.option(bool, "verbose", "Print the output of every integration test") orelse false) {
+        run_integration.addArg("--verbose");
     }
 
     test_step.dependOn(&run_integration.step);
@@ -211,40 +197,10 @@ fn detectNativeRocTarget(target: std.Target) ?RocTarget {
     };
 }
 
-/// Custom step to remove a single file if it exists
-const CleanupStep = struct {
-    step: std.Build.Step,
-    path: std.Build.LazyPath,
-
-    fn create(b: *std.Build, path: std.Build.LazyPath) *CleanupStep {
-        const self = b.allocator.create(CleanupStep) catch @panic("OOM");
-        self.* = .{
-            .step = std.Build.Step.init(.{
-                .id = .custom,
-                .name = "cleanup",
-                .owner = b,
-                .makeFn = make,
-            }),
-            .path = path,
-        };
-        return self;
-    }
-
-    fn make(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void {
-        _ = options;
-        const self: *CleanupStep = @fieldParentPtr("step", step);
-        const path = self.path.getPath2(step.owner, null);
-        std.Io.Dir.cwd().deleteFile(step.owner.graph.io, path) catch |err| switch (err) {
-            error.FileNotFound => {}, // Already gone, that's fine
-            else => return err,
-        };
-    }
-};
-
 fn buildHostLib(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
 ) *std.Build.Step.Compile {
     const host_lib = b.addLibrary(.{
         .name = "host",
@@ -253,7 +209,7 @@ fn buildHostLib(
             .root_source_file = b.path("src/host.zig"),
             .target = target,
             .optimize = optimize,
-            .strip = optimize != .Debug,
+            .strip = optimize != .debug,
             .pic = true,
         }),
     });

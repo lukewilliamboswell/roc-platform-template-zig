@@ -74,7 +74,7 @@ jobs:
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.16.0
+          version: 0.17.0
           use-cache: false
 
       - name: Read pinned Roc version
@@ -187,7 +187,7 @@ jobs:
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
-          version: 0.16.0
+          version: 0.17.0
           use-cache: false
 
       - name: Read pinned Roc version
@@ -321,7 +321,7 @@ jobs:
           env = os.environ
           url = f"https://github.com/{env['GITHUB_REPOSITORY']}/releases/download/{env['RELEASE_VERSION']}/{env['BUNDLE_FILE']}"
           Path("release-notes.md").write_text(
-              f"Platform built with Zig 0.16.0 and Roc `{env['COMPILER_PIN']}`.\n\n"
+              f"Platform built with Zig 0.17.0 and Roc `{env['COMPILER_PIN']}`.\n\n"
               f"Compiler policy: `{env['COMPILER_CHANNEL']}` (exact nightly bootstrap; no stable compiler support claim).\n\n"
               f"Tested source: `{env['SOURCE_SHA']}`.\n\n"
               f"Platform bundle: {url}\n\n"

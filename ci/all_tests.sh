@@ -16,7 +16,7 @@ if [ -z "${SKIP_ZIG_BUILD:-}" ]; then
 
   echo ""
   echo "Running tests..."
-  zig build test -- --verbose
+  zig build test -Dverbose
 
   echo ""
   echo "Running bundle..."

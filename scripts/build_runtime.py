@@ -93,7 +93,7 @@ def sbom(stage: Path, manifest: dict, archive: Path, epoch: int) -> dict:
         ("zig", "Zig compiler distribution", manifest["sources"]["zig_version"], "NOASSERTION"),
     ]:
         packages.append({"SPDXID": f"SPDXRef-{ident}", "name": name, "versionInfo": ver,
-                         "downloadLocation": "https://ziglang.org/download/0.16.0/" if ident != "runtime" else "NOASSERTION",
+                         "downloadLocation": f"https://ziglang.org/download/{manifest['sources']['zig_version']}/" if ident != "runtime" else "NOASSERTION",
                          "filesAnalyzed": False, "licenseConcluded": "NOASSERTION", "licenseDeclared": license_name,
                          "copyrightText": "NOASSERTION"})
     compiler = manifest["sources"]["toolchains"][manifest["builder_platform"]]
