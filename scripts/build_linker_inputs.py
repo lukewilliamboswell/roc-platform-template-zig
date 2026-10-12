@@ -106,7 +106,8 @@ def msvc_runtime(zig: Path, work: Path, env: dict[str, str]) -> bytes:
         if digest_bytes(data) != upstream["files"][name]:
             raise ValueError("Vendored MSVC runtime source differs from UPSTREAM.json: " + name)
         (build / name).write_bytes(data)
-    common = ["-target", "x86_64-windows-msvc", "-O", "ReleaseFast", "-fstrip", "-fno-stack-check"]
+    # -j1: Zig numbers a local `__anon_N` symbol by the compiler thread that made it.
+    common = ["-target", "x86_64-windows-msvc", "-O", "ReleaseFast", "-fstrip", "-fno-stack-check", "-j1"]
     run([zig, "build-obj", "tls.zig", *common, "-femit-bin=tls.obj"], cwd=build, env=env)
     run([zig, "build-lib", "exe_startup.zig", "tls.obj", *common, "-fcompiler-rt",
          "-femit-bin=unnormalized.lib"], cwd=build, env=env)
