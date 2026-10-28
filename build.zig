@@ -78,7 +78,21 @@ const all_targets = [_]RocTarget{
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
-    const runtime_stage = b.addSystemCommand(&.{ "python3", "scripts/linker_inputs.py", "stage" });
+    // The linker-input tool runs on the build host, so `zig build` needs no Python.
+    const link_inputs = b.addExecutable(.{
+        .name = "link_inputs",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/link_inputs.zig"),
+            .target = b.graph.host,
+            .optimize = .ReleaseSafe,
+        }),
+    });
+    const runtime_stage = linkInputsRun(b, link_inputs, "stage");
+
+    const fetch_step = b.step("fetch-link-inputs", "Download and verify the locked linker inputs");
+    fetch_step.dependOn(&linkInputsRun(b, link_inputs, "fetch").step);
+    const check_step = b.step("check-link-inputs", "Verify the cached linker inputs match the lock");
+    check_step.dependOn(&linkInputsRun(b, link_inputs, "check").step);
 
     // Default step: build for all targets
     const all_step = b.getInstallStep();
@@ -158,21 +172,28 @@ pub fn build(b: *std.Build) void {
 
     const run_host_tests = b.addRunArtifact(host_tests);
 
+    // The examples against tests/spec.json, run by the tooling compiler.
     const run_integration = b.addSystemCommand(&.{
-        "python3",
-        "scripts/test.py",
-        "--examples-dir",
-        "examples",
+        "roc-stable",
+        "scripts/test_examples.roc",
+        "--",
+        "--no-build",
     });
     // Integration tests need the native platform library to be built first
     run_integration.step.dependOn(&copy_native.step);
     // Run integration after unit tests
     run_integration.step.dependOn(&run_host_tests.step);
-    if (b.option(bool, "verbose", "Print the output of every integration test") orelse false) {
-        run_integration.addArg("--verbose");
-    }
 
     test_step.dependOn(&run_integration.step);
+}
+
+/// Run the linker-input tool from the repository root; it reads and writes the source tree.
+fn linkInputsRun(b: *std.Build, tool: *std.Build.Step.Compile, command: []const u8) *std.Build.Step.Run {
+    const run = b.addRunArtifact(tool);
+    run.setCwd(b.path("."));
+    run.addArg(command);
+    run.has_side_effects = true;
+    return run;
 }
 
 /// Detect which RocTarget matches the native platform
