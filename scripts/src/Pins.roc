@@ -135,25 +135,25 @@ quoted = |value|
 	}
 
 script : Str
-script = "#!/usr/bin/env roc-stable\napp [main!] {\n\tcli: platform \"https://example.com/cli.tar.zst\",\n\troc: \"nightly-2026-10-23-18478ff\",\n}\n\nmain! = |_| { roc: \"not a header\" }\n"
+script = "#!/usr/bin/env roc-stable\napp [main!] {\n\tcli: platform \"https://example.com/cli.tar.zst\",\n\troc: \"nightly-2026-10-09-258ab27\",\n}\n\nmain! = |_| { roc: \"not a header\" }\n"
 
 example : Str
 example = "app [Model, program] { rr: platform \"../../platform/main.roc\" }\n\nprogram = { roc: \"not a header\" }\n"
 
 platform_header : Str
-platform_header = "## The platform.\n## app [Model, program] { roc: \"nightly-2026-01-01-0000000\" }\nplatform \"\"\n\trequires {\n\t\t[Model : model] for program : App.Program(model)\n\t}\n\texposes [App]\n\tpackages {\n\t\thttp: \"https://example.com/http.tar.zst\",\n\t\troc: \"nightly-2026-10-23-18478ff\",\n\t}\n\tprovides { init!: \"init\" }\n"
+platform_header = "## The platform.\n## app [Model, program] { roc: \"nightly-2026-01-01-0000000\" }\nplatform \"\"\n\trequires {\n\t\t[Model : model] for program : App.Program(model)\n\t}\n\texposes [App]\n\tpackages {\n\t\thttp: \"https://example.com/http.tar.zst\",\n\t\troc: \"nightly-2026-10-09-258ab27\",\n\t}\n\tprovides { init!: \"init\" }\n"
 
-expect Pins.stable_tag("\t\tPrograms([Fetch(\"roc-stable\", Recipes.roc_nightly(\"nightly-2026-10-23-18478ff\"))]),\n") == Ok("nightly-2026-10-23-18478ff")
+expect Pins.stable_tag("\t\tPrograms([Fetch(\"roc-stable\", Recipes.roc_nightly(\"nightly-2026-10-09-258ab27\"))]),\n") == Ok("nightly-2026-10-09-258ab27")
 expect Pins.stable_tag("# `roc-stable` is fetched below\n") == Err(NoStableCompiler)
 expect Pins.stable_tag("Fetch(\"roc-stable\", Recipes.roc_nightly(\"\"))") == Err(NoStableCompiler)
-expect Pins.roc_pin(script) == Ok("nightly-2026-10-23-18478ff")
+expect Pins.roc_pin(script) == Ok("nightly-2026-10-09-258ab27")
 expect Pins.roc_pin(example) == Err(NoPin)
 expect Pins.roc_pin("app [Model, program] { roc: \"nightly-1\", rr: platform \"../../platform/main.roc\" }\n") == Ok("nightly-1")
 expect Pins.roc_pin("app [main!] { heroc: \"nightly-1\" }\n") == Err(NoPin)
 expect Pins.roc_pin("app [main!] { roc: \"a\", roc: \"b\" }\n") == Err(MalformedPin)
 expect Pins.roc_pin("app [main!] { roc: nightly }\n") == Err(MalformedPin)
-expect Pins.roc_pin(platform_header) == Ok("nightly-2026-10-23-18478ff")
-expect Pins.roc_pin(Str.replace_each(platform_header, "\t\troc: \"nightly-2026-10-23-18478ff\",\n", "")) == Err(NoPin)
+expect Pins.roc_pin(platform_header) == Ok("nightly-2026-10-09-258ab27")
+expect Pins.roc_pin(Str.replace_each(platform_header, "\t\troc: \"nightly-2026-10-09-258ab27\",\n", "")) == Err(NoPin)
 expect Pins.roc_pin("package [Pins] {\n\troc: \"nightly-1\",\n}\n") == Ok("nightly-1")
 expect Pins.roc_pin("## A module.\nPins := [].{\n\tx = { roc: \"nightly-1\" }\n}\n") == Err(NoPin)
 expect Pins.is_retired_pin_file(".roc-version") and Pins.is_retired_pin_file("examples/x/.roc-version")

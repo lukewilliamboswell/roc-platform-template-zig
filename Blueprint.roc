@@ -25,7 +25,7 @@ config = [
 	Environment(
 		"scripts",
 		[
-			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-10-23-18478ff"))]),
+			Programs([Fetch("roc-stable", Recipes.roc_nightly("nightly-2026-10-09-258ab27"))]),
 			# Every bundle the scripts depend on, including dependencies of
 			# dependencies: `roc-stable deps scripts/check_all.roc` lists them.
 			RocPackages([
