@@ -34,7 +34,9 @@ jobs:
     steps:
       - name: Publish only from main
         if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
-        run: { echo "Release from main"; exit 1; }
+        run: |
+          echo "Release from main"
+          exit 1
       - id: nightly
         env:
           GH_TOKEN: ${{ github.token }}
