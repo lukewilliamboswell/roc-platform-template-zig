@@ -10,23 +10,26 @@ A template for building [Roc platforms](https://www.roc-lang.org/platforms) usin
 ## Requirements
 
 - [Zig](https://ziglang.org/download/) 0.17.0
-- [Roc](https://github.com/roc-lang/nightlies/releases): install the exact nightly named by the `roc` field in the application header. The platform header declares the development compiler.
+- [Roc](https://github.com/roc-lang/nightlies/releases): the latest nightly. The platform and its examples name no compiler.
+- [roc-blueprint](https://github.com/lukewilliamboswell/roc-blueprint) for the repository tasks. It provides Zig and `roc-stable`, the fixed nightly that runs the scripts in `scripts/`, from `Blueprint.roc`.
 
 ## Examples
 
-The examples use [platform release 1.0.0](https://github.com/lukewilliamboswell/roc-platform-template-zig/releases/tag/1.0.0), tested with the compiler declared in each header. Install that compiler, then run an example directly:
+Each folder in `examples/` is a complete application that names this checkout's
+platform by relative path, so it runs against the source here:
 
 ```bash
-roc version
+blueprint run fetch-link-inputs   # once, on a fresh checkout
+zig build
 roc examples/hello_world/main.roc
 # Hello, World!
 
 printf 'Ada\n' | roc examples/echo/main.roc
 ```
 
-Each folder in `examples/` is a complete application. Copy the whole folder,
-including its pinned compiler and immutable platform URL. The header declares a
-compiler requirement; it does not install or select the executable.
+To start a project, download `roc-platform-template-zig-examples-VERSION.zip`
+from a [release](https://github.com/lukewilliamboswell/roc-platform-template-zig/releases):
+its examples name that release's immutable bundle URL instead.
 
 Build a standalone executable: `roc build examples/hello_world/main.roc`.
 
@@ -42,31 +45,25 @@ zig build docs
 
 ## Testing
 
-The checked-in examples reference the platform by relative path (`../../platform/main.roc`), so `zig build test` exercises the source in this checkout directly. Each release also attaches a frozen `examples-VERSION.tar.gz` whose application headers point at that release's immutable bundle URL; copy examples from there to start a project.
-
-[`scripts/test_spec.json`](scripts/test_spec.json) is the source of truth for example coverage. Every example has one entry and can define any number of named cases. A case can provide command-line arguments, stdin, environment variables, an expected exit code, and combined or stream-specific output assertions. The runner builds each example once and reuses that binary for all of its cases on Linux, macOS, and Windows.
-
-```
-$ zig build test
-All test stages passed (check: 12, test: 2, build: 12, run: 17)
-```
-
-Run the spec directly against another examples directory or only selected stages:
+[`tests/spec.json`](tests/spec.json) records every example's cases: the
+arguments, standard input, and the exact standard output, standard error and
+exit code expected. It uses the same format as the release archive and the
+shared [nightly compatibility](https://github.com/lukewilliamboswell/roc-automation)
+runner.
 
 ```bash
-python3 scripts/test_published_examples.py  # latest release's frozen examples, fresh cache
-python3 scripts/test.py --operation validate
-python3 scripts/test.py --operation run
+blueprint run check              # compiler pins, compiled artifacts, the scripts, Zig formatting
+zig build test                   # host unit tests, then every example against tests/spec.json
+blueprint run test -- --update   # record what the examples print now, for review
 ```
 
 ## Building
 
-For a fresh checkout, install Python 3.10+ and GitHub CLI 2.98+, then fetch the
-pinned linker inputs once. This verifies their hashes, provenance and SBOM attestations;
-subsequent builds work offline.
+`link-inputs.lock.json` selects the external linker inputs. Fetch them once;
+every build verifies their size and SHA-256 and works offline afterwards.
 
 ```bash
-python3 scripts/linker_inputs.py fetch
+zig build fetch-link-inputs
 
 # Build for all supported targets (cross-compilation)
 zig build -Doptimize=ReleaseSafe
@@ -88,10 +85,11 @@ This updates `src/roc_platform_abi.zig` with the ABI types and dispatch table ma
 ## Bundling
 
 ```bash
-./bundle.sh
+blueprint run bundle
 ```
 
-This creates a `.tar.zst` bundle containing all `.roc` files and prebuilt host libraries.
+This creates a `.tar.zst` bundle of the platform's `.roc` files, the host
+libraries and the locked linker inputs, from an explicit inventory.
 
 ## Supported Targets
 
@@ -115,20 +113,10 @@ be built from the platform source in this checkout and are not release inputs.
 
 ## Maintenance and releases
 
-`main` tracks an exact nightly. The updater advances the platform and all example
-compiler headers together. Published-example validation runs the latest release's frozen
-examples against its released bundle, changing only the compiler pin in temporary copies. CI has
-separate **Published examples** and **Current source** jobs; release validation
-also tests the exact proposed archive. A compiler update must pass all three.
-Automatic merging is disabled; compiler compatibility failures need review.
-
-Publication currently uses the explicit exact-nightly bootstrap policy, with no
-stable compiler or LTS promise. Package versions are independent of compiler
-versions. The release workflow checks that policy, rejects existing tags, tests
-source and bundles, and publishes the tested commit with its compiler requirement
-and SHA-256 digest. Nightly validation cannot publish or deploy.
-
-See [the maintainer procedure](ci/MAINTAINING.md) for release follow-ups and the
-remaining live rollout checks.
+The repository follows [roc-automation](https://github.com/lukewilliamboswell/roc-automation):
+CI tests the working tree with the latest Roc nightly, `release.yml` builds and
+tests the exact bundle and examples archive it would publish, and
+`nightly.yml` runs the latest release's archived examples against each new
+nightly. See [MAINTAINING.md](MAINTAINING.md).
 
 Runtime sources, independent releases and verification are described in [runtime/README.md](runtime/README.md).
