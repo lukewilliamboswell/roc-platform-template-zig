@@ -1,0 +1,23 @@
+= Roc platform template for Zig
+:doctype: book
+:toc: left
+:revnumber: {docs-version}
+:author: Roc platform template contributors
+
+Build Roc platforms with Zig. Start by running an example, then use the contributor and release guides when changing the platform.
+
+link:api/index.html[Platform API reference]
+
+include::getting-started.adoc[leveloffset=+1]
+
+include::contributing.adoc[leveloffset=+1]
+
+include::host-development.adoc[leveloffset=+1]
+
+include::releases.adoc[leveloffset=+1]
+
+include::linker-inputs.adoc[leveloffset=+1]
+
+include::runtime.adoc[leveloffset=+1]
+
+include::targets.adoc[leveloffset=+1]

@@ -56,3 +56,5 @@ build-output/
 dist/
 platform/targets/
 .blueprint/
+
+.docs-out/

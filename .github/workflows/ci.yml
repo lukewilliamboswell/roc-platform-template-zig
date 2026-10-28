@@ -50,6 +50,12 @@ jobs:
           cache-workload: dev
       - run: blueprint run compiler-version
       - run: blueprint run check
+      - run: blueprint run docs -- --docs-version "unreleased"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: manual-preview
+          path: .docs-out/site
+          if-no-files-found: error
 
   # Every example, as checked in, against the working tree's platform, on
   # every release target's native runner: check, build and run each case and

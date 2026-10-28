@@ -43,6 +43,8 @@ config = [
 			Tools(["nix#zig_0_17", "nix#coreutils", "nix#gnutar", "nix#gzip", "nix#zip", "nix#unzip", "nix#gh"]),
 		],
 	),
+	Environment("docs", [Programs([Fetch("roc-docs", Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.4.0/roc-docs-{system}"))]), Expect(["roc"])]),
+	Task("docs", [Use("docs"), Run(["roc-docs", "build", "--workspace", ".", "--pdf-filename", "roc-platform-template-zig.pdf", "--site-url", "https://lukewilliamboswell.github.io/roc-platform-template-zig/", "--api-entrypoint", "platform/main.roc"])]),
 	Shell("default", [Use("dev")]),
 	Task("check", [Use("dev"), Run(["scripts/check_all.roc"])]),
 	Task("pins", [Use("scripts"), Run(["scripts/check_no_pins.roc"])]),
