@@ -8,11 +8,11 @@ The archive strips build-path-bearing debug data with LLVM objcopy and contains 
 manifest, and license notices. Zig 0.17.0 supplies musl 1.2.5 with Zig-specific
 changes; the SBOM does not describe this as unmodified upstream musl.
 
-To reproduce on Linux, install Python 3.10+, Minisign and LLVM 18.1.3 (`llvm-objcopy-18`), then run:
+To reproduce on Linux, install Minisign and LLVM 18.1.3 (`llvm-objcopy-18`), then run from `blueprint shell`:
 
 ```sh
-python3 scripts/build_runtime.py build --output .zig-cache/runtime-dist
-python3 scripts/build_runtime.py smoke .zig-cache/runtime-dist/roc-runtime-1.0.0.tar.gz
+scripts/build_link_inputs.roc -- runtime --output .zig-cache/runtime-dist
+scripts/build_link_inputs.roc -- runtime-smoke .zig-cache/runtime-dist/roc-runtime-1.0.0.tar.gz
 ```
 
 Output directories must be new. Two independent CI builds must produce identical
@@ -44,14 +44,14 @@ Roc nightly updates do not change that lock. Historical Git commits are preserve
 
 ## Platform contributors
 
-Install Python 3.10+ and GitHub CLI 2.98+ alongside Zig and Roc. Fetch the pinned
-runtime before building from a fresh checkout:
+The runtime reaches the platform inside the linker inputs that
+`link-inputs.lock.json` selects. Fetch them before building from a fresh checkout:
 
 ```sh
-python3 scripts/runtime.py fetch
+zig build fetch-link-inputs
 zig build
 zig build test
-./bundle.sh
+blueprint run bundle
 ```
 
 The trusted publisher verifies provenance once when admitting a dependency.
@@ -61,21 +61,11 @@ missing input: a cache miss downloads the exact locked asset. This makes the
 common path cheap and offline when cached while preserving provenance at the
 dependency-change boundary.
 
-During the first rollout, `runtime/dependency.json` remains the compatibility
-lock. Once the publisher adds `link-inputs.lock.json`, consumers prefer it; the
-legacy lock can then be removed in a reviewed cleanup.
-
-The first rollout is necessarily staged because the trusted publisher wrapper
-must already exist on the default branch. Merge an infrastructure PR containing
-the producer, consumer, wrapper, and compatibility read first. Then open an
-adoption PR that removes the legacy path and lock, dispatch the default-branch
-publisher for that PR, and let its signed lock-only commit make adoption green.
-This one-time ordering constraint is not a reason to rebuild inputs in routine CI.
-
-Files live in `.zig-cache/runtime/<sha256>/`. Each build verifies the archive
-and extracted files before staging runtime files under the ignored
+Files live in `.zig-cache/linker-inputs/<sha256>/`. Each build verifies the
+archive and extracted files before staging them under the ignored
 `platform/targets/` directories. A cache mismatch fails with an error; rerun
-`fetch` to replace it with a newly verified download. Never edit the cached files.
+`zig build fetch-link-inputs` to replace it with a newly verified download.
+Never edit the cached files.
 
 Platform bundles use a clean, explicit inventory of source modules, required host
 and runtime libraries, licenses and the runtime manifest. Unrelated local
@@ -91,8 +81,6 @@ gh attestation verify roc-runtime-1.0.0.tar.gz --repo lukewilliamboswell/roc-pla
 
 For platform releases, use the `.tar.zst` bundle and the corresponding
 `platform-provenance.sigstore.json` / `platform-sbom.sigstore.json` assets.
-`runtime.py fetch` adds the stricter identity and commit constraints from the
-reviewed dependency lock to the commands above.
 
 Attestations prove the recorded build identity and artifact integrity. They do
 not constitute an OpenSSF certification or an asserted SLSA level.

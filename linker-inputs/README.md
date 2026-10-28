@@ -31,8 +31,8 @@ anything is released.
 Build twice and compare the outputs:
 
 ```sh
-python3 scripts/build_linker_inputs.py --output .zig-cache/linker-inputs-1
-python3 scripts/build_linker_inputs.py --output .zig-cache/linker-inputs-2
+scripts/build_link_inputs.roc -- build --output .zig-cache/linker-inputs-1
+scripts/build_link_inputs.roc -- build --output .zig-cache/linker-inputs-2
 diff -r .zig-cache/linker-inputs-1 .zig-cache/linker-inputs-2
 ```
 
