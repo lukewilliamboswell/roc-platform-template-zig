@@ -133,9 +133,10 @@ pub fn build(b: *std.Build) void {
         native_lib.getEmittedBin(),
         b.pathJoin(&.{ "platform", "targets", native_roc_target.targetDir(), native_roc_target.libFilename() }),
     );
+    // Every target links against its staged linker inputs, not only musl.
+    copy_native.step.dependOn(&runtime_stage.step);
 
     if (native_roc_target.baselineMuslTarget()) |baseline_roc_target| {
-        copy_native.step.dependOn(&runtime_stage.step);
         const baseline_lib = buildHostLib(b, b.resolveTargetQuery(baseline_roc_target.toZigTarget()), optimize);
         copy_native.addCopyFileToSource(
             baseline_lib.getEmittedBin(),
