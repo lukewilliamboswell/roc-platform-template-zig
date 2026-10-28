@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 180
     permissions: {actions: write, attestations: read, contents: write, pull-requests: read}
     steps:
-      - uses: lukewilliamboswell/roc-automation/actions/publish-build-inputs@26f35e78f19c761b0160768f267e321dbccac3c7
+      - uses: lukewilliamboswell/roc-automation/actions/publish-build-inputs@a25b5129340b9b2ad1744d20330b8ee4d38a1849
         env: {GH_TOKEN: '${{ github.token }}'}
         with:
           pull-request: ${{ inputs.pull-request }}

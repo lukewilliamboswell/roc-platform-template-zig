@@ -52,4 +52,9 @@ libapp
 roc-src/
 build-output/
 
-__pycache__/
+# release output and staged linker inputs
+dist/
+platform/targets/
+.blueprint/
+
+.docs-out/
