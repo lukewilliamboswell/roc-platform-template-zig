@@ -1,0 +1,38 @@
+name: Nightly compatibility
+
+# Does the latest platform release still work with the latest Roc nightly? The
+# shared roc-automation workflow resolves that pair once, downloads the
+# release's roc-platform-template-zig-examples-<version>.zip, and on every
+# runner checks, builds and runs each archived example against the published
+# bundle, comparing its output with the archive's spec.json. One tracking
+# issue records a failure and the next pass closes it. It changes nothing in
+# this repository: a failure means the released platform needs a patch release.
+#
+# macos-15-intel (x64mac) is a release target the shared runner does not
+# accept, so release.yml covers it.
+on:
+  schedule:
+    - cron: '23 14 * * *'
+  workflow_dispatch:
+    inputs:
+      nightly-tag:
+        description: Reproduce with this roc-lang/nightlies tag instead of the latest
+        type: string
+        default: ''
+      release-tag:
+        description: Reproduce with this platform release instead of the latest
+        type: string
+        default: ''
+
+permissions: {}
+
+jobs:
+  compatibility:
+    permissions:
+      contents: read
+      issues: write
+    uses: lukewilliamboswell/roc-automation/.github/workflows/nightly-compatibility.yml@a25b5129340b9b2ad1744d20330b8ee4d38a1849
+    with:
+      nightly-tag: ${{ inputs.nightly-tag || '' }}
+      release-tag: ${{ inputs.release-tag || '' }}
+      runners: '["ubuntu-22.04", "ubuntu-24.04-arm", "macos-15", "windows-2022", "windows-2025"]'

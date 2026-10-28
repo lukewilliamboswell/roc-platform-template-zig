@@ -1,0 +1,50 @@
+= Contributor tasks and workflows
+
+This repository follows
+https://github.com/lukewilliamboswell/roc-automation[roc-automation]: the
+platform and its examples name no compiler and are tested with the latest Roc
+nightly; the automation is Roc scripts under `scripts/`, run by `roc-stable`,
+the fixed nightly `Blueprint.roc` fetches; and three workflows answer three
+questions.
+
+[cols="1,2,3",options="header"]
+|===
+| Workflow | Question | Runs
+| `ci.yml` | Does the working tree work with the latest nightly? | `blueprint run check` and `blueprint run docs`; on every release target, `zig build test` (host unit tests, then every example against `tests/spec.json`)
+| `release.yml` | Do the exact bundle and examples archive a release would publish work? | `blueprint run release -- build VERSION` on Linux, then `scripts/release.roc -- test-archive` on every release target, with the bundle served over loopback and an empty package cache
+| `nightly.yml` | Does the latest release still work with the latest nightly? | The shared runner on the release's `roc-platform-template-zig-examples-VERSION.zip`
+|===
+
+
+`CI required` and `Bundle required` are the required checks on `main`.
+
+== Local tasks
+
+[source,sh]
+----
+blueprint run docs                       # HTML manual, PDF and API reference
+blueprint run check                      # pins, compiled artifacts, the scripts' tests and formatting, Zig formatting
+blueprint run fetch-link-inputs          # the locked linker inputs, once per checkout
+zig build test                           # host unit tests, then the examples (needs roc-stable on PATH: blueprint shell)
+blueprint run test -- --update           # record what the examples print in tests/spec.json
+blueprint run build-release              # the host with -Doptimize=ReleaseSafe, as a release ships it
+blueprint run release -- build 0.0.1-dryrun   # dist/, tested over loopback
+----
+
+The latest nightly must be on `PATH` as `roc`. On Windows and Intel macOS,
+where Blueprint does not run, CI installs `roc-stable` with
+`.github/actions/setup-toolchain`, from the tag `Blueprint.roc` names.
+
+== A new Roc nightly
+
+The platform and examples name no nightly, so there is no pin to update. A
+nightly that breaks the working tree fails CI on the next pull request; fix the
+source. A nightly that breaks the latest release fails `nightly.yml`, which
+opens one tracking issue: fix the source if needed and publish a patch release.
+Its archive is what the next nightly run tests, and a pass closes the issue.
+
+The scripts' compiler, `roc-stable`, changes only on purpose: update the tag in
+`Blueprint.roc` and the `roc` field of every script together, format the
+scripts with the new `roc-stable fmt`, and run `blueprint update`.
+`scripts/check_no_pins.roc` keeps the two in step.
+

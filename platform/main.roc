@@ -2,7 +2,7 @@ platform ""
     # Applications may return their own error tags; main_for_host! reports them.
     requires {} { main! : List(Str) => Try({}, _) }
     exposes [Stdout, Stderr, Stdin]
-    packages { roc: "nightly-2026-10-04-130536d" }
+    packages {}
     provides { "roc_main": main_for_host! }
     hosted {
         "roc_stderr_line": Host.stderr_line!,
@@ -17,7 +17,31 @@ platform ""
         x64v1musl: { inputs: ["crt1.o", "libhost.a", app, "libc.a", "libzigc.a", "libcompiler_rt.a"] },
         arm64musl: { inputs: ["crt1.o", "libhost.a", app, "libc.a", "libzigc.a", "libcompiler_rt.a"] },
         arm64v1musl: { inputs: ["crt1.o", "libhost.a", app, "libc.a", "libzigc.a", "libcompiler_rt.a"] },
-        x64win: { inputs: ["host.lib", app] },
+        x64win: { inputs: [
+            "host.lib",
+            app,
+            "msvc_runtime.lib",
+            "advapi32.lib",
+            "api-ms-win-crt-conio-l1-1-0.lib",
+            "api-ms-win-crt-convert-l1-1-0.lib",
+            "api-ms-win-crt-environment-l1-1-0.lib",
+            "api-ms-win-crt-filesystem-l1-1-0.lib",
+            "api-ms-win-crt-heap-l1-1-0.lib",
+            "api-ms-win-crt-locale-l1-1-0.lib",
+            "api-ms-win-crt-math-l1-1-0.lib",
+            "api-ms-win-crt-multibyte-l1-1-0.lib",
+            "api-ms-win-crt-private-l1-1-0.lib",
+            "api-ms-win-crt-process-l1-1-0.lib",
+            "api-ms-win-crt-runtime-l1-1-0.lib",
+            "api-ms-win-crt-stdio-l1-1-0.lib",
+            "api-ms-win-crt-string-l1-1-0.lib",
+            "api-ms-win-crt-time-l1-1-0.lib",
+            "api-ms-win-crt-utility-l1-1-0.lib",
+            "kernel32.lib",
+            "ntdll.lib",
+            "shell32.lib",
+            "user32.lib",
+        ] },
     }
 
 import Stdout

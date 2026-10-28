@@ -30,22 +30,32 @@ jobs:
     outputs:
       version: ${{ steps.metadata.outputs.version }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.2
         with:
           persist-credentials: false
+      - id: stable
+        run: echo "tag=$(sed -n 's/.*Fetch("roc-stable", Recipes.roc_nightly("\(nightly-[0-9a-f-]*\)")).*/\1/p' Blueprint.roc)" >> "$GITHUB_OUTPUT"
+      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.stable.outputs.tag }}
+      # The producer scripts run on the tooling compiler Blueprint.roc names.
+      - run: ln -s "$(command -v roc)" "$RUNNER_TEMP/roc-stable" && echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
       - name: Install pinned normalization and signature tools
         run: |
-          PACKAGE=$(python3 -c 'import json; print(json.load(open("runtime/sources.json"))["objcopy"]["package"])')
+          PACKAGE=$(jq -r .objcopy.package runtime/sources.json)
           sudo apt-get update
           sudo apt-get install -y minisign "$PACKAGE"
       - name: Test archive, inventory, and extraction safety
-        run: python3 -m unittest discover -s scripts -p 'test_linker_inputs.py' -v
+        run: |
+          roc-stable test scripts/src/LinkInputs.roc
+          roc-stable test scripts/src/JsonValue.roc
       - name: Build from verified sources and project-authored interface metadata
-        run: python3 scripts/build_linker_inputs.py --output .zig-cache/linker-inputs-dist
+        run: roc-stable scripts/build_link_inputs.roc -- build --output .zig-cache/linker-inputs-dist
       - name: Read version
         id: metadata
         run: |
-          VERSION=$(python3 -c 'import json; print(json.load(open("linker-inputs/sources.json"))["version"])')
+          VERSION=$(jq -r .version linker-inputs/sources.json)
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -74,12 +84,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {persist-credentials: false, ref: '${{ github.sha }}'}
+      - id: stable
+        run: echo "tag=$(sed -n 's/.*Fetch("roc-stable", Recipes.roc_nightly("\(nightly-[0-9a-f-]*\)")).*/\1/p' Blueprint.roc)" >> "$GITHUB_OUTPUT"
+      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ steps.stable.outputs.tag }}
+      # The producer scripts run on the tooling compiler Blueprint.roc names.
+      - run: ln -s "$(command -v roc)" "$RUNNER_TEMP/roc-stable" && echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
       - name: Bind candidate to the publisher-selected commit
         env: {EXPECTED_SHA: '${{ inputs.expected_sha }}'}
         run: test -n "$EXPECTED_SHA" && test "$EXPECTED_SHA" = "$GITHUB_SHA"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with: {name: linker-inputs-1, path: aggregate}
-      - run: python3 scripts/build_input_release.py --source aggregate --output release
+      - run: roc-stable scripts/build_link_inputs.roc -- release --source aggregate --output release
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: |

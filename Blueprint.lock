@@ -1,0 +1,129 @@
+(
+	(fetched ((
+		(name "roc-stable")
+		(obtained Both)
+		(served ("release-assets.githubusercontent.com"))
+		(sha256 "dcb99abdf17d062246c05e394357ad682b883a6bcff7b2e581e20564ea88ffc4")
+		(size 70463871)
+		(system "x86_64-linux")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-09-258ab27/roc_nightly-linux_x86_64-2026-10-09-258ab27.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-09-258ab27")) (
+		(name "roc-stable")
+		(obtained Published)
+		(served ())
+		(sha256 "9750ce89a820d3cdeadd751996d26c70b68584ca9428e52f43a1bb20702c54e5")
+		(size 67565047)
+		(system "aarch64-linux")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-09-258ab27/roc_nightly-linux_arm64-2026-10-09-258ab27.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-09-258ab27")) (
+		(name "roc-stable")
+		(obtained Published)
+		(served ())
+		(sha256 "aa6339579730fcea4753940bec21f5d8cf8be8e25659ec001abccbc3463a60b2")
+		(size 67646302)
+		(system "aarch64-darwin")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-09-258ab27/roc_nightly-macos_apple_silicon-2026-10-09-258ab27.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-09-258ab27")) (
+		(name "roc-docs")
+		(obtained Both)
+		(served ("release-assets.githubusercontent.com"))
+		(sha256 "64fa31084c9efab1ccf9dfd4bd33f8a3bd7e41c6344fde447f5a3bbd55bca78d")
+		(size 22071488)
+		(system "x86_64-linux")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.4.0/roc-docs-x86_64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.4.0")) (
+		(name "roc-docs")
+		(obtained Published)
+		(served ())
+		(sha256 "0f50e600197ff8906b6d913bcd145a1a256573df8b19d51883a20cacde4f6e11")
+		(size 17334536)
+		(system "aarch64-linux")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.4.0/roc-docs-aarch64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.4.0")) (
+		(name "roc-docs")
+		(obtained Published)
+		(served ())
+		(sha256 "7025e6bcb904d439908076219b6a7b6b3e84d08d71d01f68ef390beb05737b29")
+		(size 17286480)
+		(system "aarch64-darwin")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.4.0/roc-docs-aarch64-darwin"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.4.0"))))
+	(format (
+		(major 2)
+		(minor 0)))
+	(hints ((
+		(provider "nix")
+		(value (Attrs ((
+			(name "identity")
+			(value (Attrs ((
+				(name "inputs")
+				(value (Attrs ((
+					(name "nix")
+					(value (Attrs ((
+						(name "ref")
+						(value (Str "github:NixOS/nixpkgs/nixos-unstable"))) (
+						(name "kind")
+						(value (Str "packages"))) (
+						(name "flake")
+						(value (Bool true))))))))))) (
+				(name "overlays")
+				(value (Attrs ()))))))) (
+			(name "graph")
+			(value (Attrs ((
+				(name "root")
+				(value (Str "root"))) (
+				(name "version")
+				(value (Int 7))) (
+				(name "nodes")
+				(value (Attrs ((
+					(name "nix")
+					(value (Attrs ((
+						(name "locked")
+						(value (Attrs ((
+							(name "lastModified")
+							(value (Int 1793110635))) (
+							(name "narHash")
+							(value (Str "sha256-dhoW6VgFWlaodSY5jrBn+CF2FLmaUvDVgM7+C7T2+NM="))) (
+							(name "owner")
+							(value (Str "NixOS"))) (
+							(name "repo")
+							(value (Str "nixpkgs"))) (
+							(name "rev")
+							(value (Str "31ecbaca1bdefa45dffc409f0250bd8039ea0010"))) (
+							(name "type")
+							(value (Str "github"))))))) (
+						(name "original")
+						(value (Attrs ((
+							(name "owner")
+							(value (Str "NixOS"))) (
+							(name "ref")
+							(value (Str "nixos-unstable"))) (
+							(name "repo")
+							(value (Str "nixpkgs"))) (
+							(name "type")
+							(value (Str "github"))))))))))) (
+					(name "root")
+					(value (Attrs ((
+						(name "inputs")
+						(value (Attrs ((
+							(name "nix")
+							(value (Str "nix"))) (
+							(name "nixpkgs")
+							(value (List ((Str "nix")))))))))))))))))))))))))))
+	(intent (
+		(build_sources ())
+		(inputs ())
+		(overlays ())
+		(resolvers ())
+		(sources ((
+			(name "nix")
+			(provider (
+				(name "nix")
+				(ref "github:NixOS/nixpkgs/nixos-unstable")
+				(version 1))))))))
+	(sources ((
+		(digest "sha256:761a16e958055a56a87526398eb067f8217614b99a52f0d580cefe0bb4f6f8d3")
+		(name "nix")
+		(provider "nix")
+		(ref "github:NixOS/nixpkgs/nixos-unstable")
+		(rev "31ecbaca1bdefa45dffc409f0250bd8039ea0010")))))

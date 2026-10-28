@@ -1,0 +1,16 @@
+= Publish a platform release
+
+
+Dispatch **Release** on `main` with a new `MAJOR.MINOR.PATCH`. The workflow
+builds the bundle, the examples archive and the SBOM, tests the archive against
+the bundle on every release target, attests the bundle and its SBOM, then
+publishes the tested files with roc-automation's `publish-release`, which
+verifies every uploaded asset against the tested file. Pull requests run the
+same steps with the version `0.0.1-dryrun` and publish nothing.
+
+The examples archive holds the repository's examples, `spec.json` and a README;
+each example differs from the repository's only in naming the release's bundle
+URL instead of `../../platform/main.roc`. Repository examples are never edited
+after a release. Never move an existing tag or replace a released asset; a
+repair is a new release.
+
