@@ -2,7 +2,7 @@ platform ""
     # Applications may return their own error tags; main_for_host! reports them.
     requires {} { main! : List(Str) => Try({}, _) }
     exposes [Stdout, Stderr, Stdin]
-    packages { roc: "nightly-2026-10-11-7d256b9" }
+    packages {}
     provides { "roc_main": main_for_host! }
     hosted {
         "roc_stderr_line": Host.stderr_line!,
