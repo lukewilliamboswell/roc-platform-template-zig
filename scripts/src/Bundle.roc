@@ -60,8 +60,9 @@ Bundle := [].{
 		Str.join_with(parts.take_first(parts.len() - 1), "/")
 	}
 
+	## The last component of a path, which Windows displays with `\\`.
 	file_name : Str -> Str
-	file_name = |path| path.split_on("/").last() ?? path
+	file_name = |path| path.replace_each("\\", "/").split_on("/").last() ?? path
 
 	## `sha256sum` output for `files`, in the same order.
 	parse_sums : Str, List(Str) -> Try(List(Str), Str)
@@ -125,6 +126,7 @@ expect Bundle.created("Created: /a/b/Abc.tar.zst") == ["/a/b/Abc.tar.zst"]
 expect Bundle.resolve("/r/.zig-cache/platform-bundle-x", "../../Abc.tar.zst") == "/r/Abc.tar.zst"
 expect Bundle.resolve("/r/s", "/out/Abc.tar.zst") == "/out/Abc.tar.zst"
 expect Bundle.parent("/r/Abc.tar.zst") == "/r"
+expect Bundle.file_name("D:\\a\\dist\\x.zip") == "x.zip" and Bundle.file_name("dist/x.zip") == "x.zip"
 expect Bundle.input_target("x64v1musl") == "x64musl" and Bundle.input_target("x64win") == "x64win"
 expect Bundle.host_library("x64win") == "host.lib" and Bundle.host_library("arm64mac") == "libhost.a"
 expect Bundle.parse_sums("aa  one\nbb  two\n", ["one", "two"]) == Ok(["aa", "bb"])

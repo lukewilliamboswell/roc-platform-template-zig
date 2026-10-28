@@ -54,7 +54,7 @@ run! = |{}| {
 	# The modules without effects carry the tests of the scripts' logic; the
 	# modules with effects are checked through the scripts that import them.
 	for source in roc_files!("scripts/src")? {
-		text = Path.read_utf8!(Path.unix(source)).map_err(|_| "cannot read ${source}")?
+		text = Path.read_utf8!(Path.utf8(source)).map_err(|_| "cannot read ${source}")?
 		if !text.contains("import cli.") {
 			succeed!("roc-stable", ["test", source])?
 		}
@@ -79,9 +79,9 @@ binaries! = |{}| {
 	listing = capture!("git", ["ls-files", "-z"])?
 	var $found = []
 	for path in listing.split_on("\u(0)").keep_if(|path| path != "") {
-		match Path.type!(Path.unix(path)) {
+		match Path.type!(Path.utf8(path)) {
 			Ok(IsFile) => {
-				bytes = Path.read_bytes!(Path.unix(path)).map_err(|_| "cannot read ${path}")?
+				bytes = Path.read_bytes!(Path.utf8(path)).map_err(|_| "cannot read ${path}")?
 				if Policy.compiled(path, bytes.take_first(8)) {
 					$found = $found.append(path)
 				}
@@ -102,7 +102,7 @@ roc_files! = |directory| files_ending!(directory, ".roc")
 ## The files directly inside `directory` whose names end with `suffix`, in a stable order.
 files_ending! : Str, Str => Try(List(Str), Str)
 files_ending! = |directory, suffix| {
-	entries = Path.list!(Path.unix(directory)).map_err(|_| "could not list ${directory}")?
+	entries = Path.list!(Path.utf8(directory)).map_err(|_| "could not list ${directory}")?
 	Ok(entries.map(Path.display).keep_if(|path| path.ends_with(suffix)).sort_with(Bundle.compare))
 }
 

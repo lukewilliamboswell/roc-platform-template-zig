@@ -66,7 +66,7 @@ run! = |update, build| {
 	Path.create_all!(Path.join(directory, "cache")).map_err(|_| "cannot create ${records}")?
 	outcome = Examples.execute!({
 		compiler: "roc",
-		root: Path.unix("."),
+		root: Path.utf8("."),
 		suite,
 		dependencies: ["../../platform/main.roc"],
 		setup: { directory, cache: Path.join(directory, "cache"), environment: [], environment_text: "[]" },
@@ -81,7 +81,7 @@ run! = |update, build| {
 		OutputLimit(number) => return Err("command ${number.to_str()} exceeded the output limit; see ${records}")
 	}
 	if update {
-		Path.write_utf8!(Path.unix(spec_path), Compatibility.render(outcome.updated)).map_err(|_| "cannot write ${spec_path}")?
+		Path.write_utf8!(Path.utf8(spec_path), Compatibility.render(outcome.updated)).map_err(|_| "cannot write ${spec_path}")?
 		say!("Recorded ${outcome.tested.to_str()} cases in ${spec_path}")?
 	}
 	for failure in outcome.failures {
@@ -94,7 +94,7 @@ run! = |update, build| {
 }
 
 read! : Str => Try(Str, Str)
-read! = |path| Path.read_utf8!(Path.unix(path)).map_err(|_| "cannot read ${path}")
+read! = |path| Path.read_utf8!(Path.utf8(path)).map_err(|_| "cannot read ${path}")
 
 say! : Str => Try({}, Str)
 say! = |line| Stdout.line!(line).map_err(|_| "cannot write to stdout")

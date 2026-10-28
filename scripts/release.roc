@@ -154,8 +154,9 @@ test_archive! = |{}| {
 	unpacked = Path.join(temporary, "unpacked")
 	Path.create_all!(unpacked).map_err(|_| "cannot create ${Path.display(unpacked)}")?
 	windows = Env.platform!().os == WINDOWS
-	# Windows runners have no unzip; their bsdtar reads ZIP archives.
-	unpack = if (windows) ["tar", "-xf", Path.display(Path.join(output, archive)), "-C", Path.display(unpacked)] else ["unzip", "-q", Path.display(Path.join(output, archive)), "-d", Path.display(unpacked)]
+	# Windows runners have no unzip; their own bsdtar reads ZIP archives, but
+	# Git Bash puts GNU tar, which does not, first on PATH.
+	unpack = if (windows) ["C:\\Windows\\System32\\tar.exe", "-xf", Path.display(Path.join(output, archive)), "-C", Path.display(unpacked)] else ["unzip", "-q", Path.display(Path.join(output, archive)), "-d", Path.display(unpacked)]
 	_ = capture!(unpack, cwd)?
 	suite_root = Path.join(unpacked, root)
 	suite = Compatibility.published_suite(read!(Path.join(suite_root, "spec.json"))?, repository, version)?
@@ -234,7 +235,7 @@ names! = |directory| {
 write_bytes! : Path, Str, List(U8) => Try({}, Str)
 write_bytes! = |stage, relative, bytes| {
 	destination = Path.join(stage, relative)
-	Path.create_all!(Path.unix(Bundle.parent(Path.display(destination)))).map_err(|_| "cannot stage ${relative}")?
+	Path.create_all!(Path.utf8(Bundle.parent(Path.display(destination)))).map_err(|_| "cannot stage ${relative}")?
 	Path.write_bytes!(destination, bytes).map_err(|_| "cannot stage ${relative}")
 }
 

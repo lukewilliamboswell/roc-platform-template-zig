@@ -80,12 +80,12 @@ run! = |output| {
 			_ => return Err("missing or invalid bundle input: ${Path.display(source.from)}; run zig build first")
 		}
 		destination = Path.join(staging, source.name)
-		Path.create_all!(Path.unix(Bundle.parent(Path.display(destination)))).map_err(|_| "cannot stage ${source.name}")?
+		Path.create_all!(Path.utf8(Bundle.parent(Path.display(destination)))).map_err(|_| "cannot stage ${source.name}")?
 		bytes = Path.read_bytes!(source.from).map_err(|_| "cannot read ${Path.display(source.from)}")?
 		Path.write_bytes!(destination, bytes).map_err(|_| "cannot stage ${source.name}")?
 	}
 
-	output_dir = Path.unix(Bundle.resolve(Path.display(cwd), output))
+	output_dir = Path.utf8(Bundle.resolve(Path.display(cwd), output))
 	Path.create_all!(output_dir).map_err(|_| "cannot create ${Path.display(output_dir)}")?
 	files = sources.map(|source| source.name)
 	ran = Cmd.new(OsStr.from_str("roc")).args(["bundle"].concat(files).concat(["--output-dir", Path.display(output_dir)]).map(OsStr.from_str)).cwd(staging).stdout(Capture).stderr(Capture).timeout_ms(600_000).output_limit(10_000_000).run!().map_err(|_| "roc bundle did not complete")?
