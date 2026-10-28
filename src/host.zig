@@ -205,15 +205,11 @@ fn platform_main(argc: usize, argv: [*][*:0]u8) c_int {
     g_roc_host = &roc_host;
 
     // Build List(Str) from argc/argv
-    std.log.debug("[HOST] Building args...", .{});
     const args_list = buildStrArgsList(argc, argv, &roc_host);
-    std.log.debug("[HOST] args_list ptr=0x{x} len={d}", .{ @intFromPtr(args_list.elements_ptr), args_list.length });
 
     // Call the app's main! entrypoint - returns I32 exit code
-    std.log.debug("[HOST] Calling roc_main...", .{});
 
     const exit_code = roc_main(args_list);
-    std.log.debug("[HOST] Returned from roc, exit_code={d}", .{exit_code});
 
     // Check for memory leaks before returning
     const leak_status = host_env.gpa.deinit();

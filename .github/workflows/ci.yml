@@ -2,31 +2,69 @@ name: CI
 
 on:
   workflow_dispatch:
-    inputs:
-      nightly_validation:
-        description: "Validate a nightly candidate without publishing or deploying"
-        type: boolean
-        required: false
-        default: false
   pull_request:
+  # Squash merges land a commit no PR run validated, so check main itself.
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  tooling:
-    name: Runtime tooling and source hygiene
+  # The platform names no compiler; it is tested with the latest nightly. That
+  # nightly is resolved once, here, and every job installs that one, so one run
+  # never tests two compilers.
+  resolve:
+    name: Resolve the latest Roc nightly
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      nightly-tag: ${{ steps.nightly.outputs.tag }}
+    steps:
+      - id: nightly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
+
+  # Everything that runs once, on one machine: the compiler-pin check, the
+  # compiled-artifact check, the Roc scripts' tests and formatting, and the
+  # Zig sources. Blueprint provides roc-stable and Zig; bare roc is the
+  # resolved nightly.
+  check:
+    name: Checks
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: python3 scripts/check_binary_artifacts.py
-      - run: python3 -m unittest discover -s scripts -p 'test_runtime_*.py' -v
+      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+        with:
+          version: nightly-new-compiler
+          nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@a25b5129340b9b2ad1744d20330b8ee4d38a1849
+        with:
+          install-nix: "true"
+          cache: "true"
+          cache-workload: dev
+      - run: blueprint run compiler-version
+      - run: blueprint run check
+      - run: blueprint run docs -- --docs-version "unreleased"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: manual-preview
+          path: .docs-out/site
+          if-no-files-found: error
 
-  build:
+  # Every example, as checked in, against the working tree's platform, on
+  # every release target's native runner: check, build and run each case and
+  # compare its output exactly with tests/spec.json.
+  examples:
     name: Current source (${{ matrix.os }})
+    needs: resolve
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -41,107 +79,34 @@ jobs:
     defaults:
       run:
         shell: bash
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # ratchet:mlugg/setup-zig@v2.2.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          version: 0.16.0
-          use-cache: false
-
-      - name: Read pinned Roc version
-        run: |
-          PIN=$(python3 scripts/roc_version.py)
-          echo "ROC_NIGHTLY_TAG=$PIN" >> "$GITHUB_ENV"
-
-      - name: Install Roc nightly
-        uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
         with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
-
-      - name: Read linker-input cache identity
-        id: linker-inputs
-        run: |
-          test -f link-inputs.lock.json
-          printf 'key=%s\n' "$(sha256sum link-inputs.lock.json | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore content-addressed linker inputs
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+          nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
+      # The cache only saves a download: every use rehashes the archive
+      # against the lock, and nothing here can rebuild it.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: .zig-cache/linker-inputs
-          key: linker-inputs-${{ runner.os }}-${{ steps.linker-inputs.outputs.key }}
-      - name: Download a cache miss and verify every cache hit
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/linker_inputs.py fetch
-
-      - name: Run all tests
+          key: linker-inputs-${{ runner.os }}-${{ hashFiles('link-inputs.lock.json') }}
+      - run: zig build fetch-link-inputs
+      # Host unit tests, then every example against tests/spec.json.
+      - name: Test the host and the examples
         uses: roc-lang/roc/.github/actions/flaky-retry@3d0fdde9ae6ffb5ef411f8c8c2fc2cdce22a74fe
         with:
-          command: bash ci/all_tests.sh
+          command: zig build test
           error_string_contains: "build.zig.zon"
 
-  published-examples:
-    name: Published examples (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - macos-15-intel
-          - macos-15
-          - ubuntu-22.04
-          - ubuntu-24.04-arm
-          - windows-2022
-          - windows-2025
-          # TODO: re-enable windows-11-arm after https://codeberg.org/ziglang/zig/issues/31865 is fixed.
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # ratchet:mlugg/setup-zig@v2.2.1
-        with:
-          version: 0.16.0
-          use-cache: false
-
-      - name: Read pinned Roc version
-        run: |
-          PIN=$(python3 scripts/roc_version.py)
-          echo "ROC_NIGHTLY_TAG=$PIN" >> "$GITHUB_ENV"
-
-      - name: Install Roc nightly
-        uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
-        with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
-
-      - name: Test the latest release's frozen examples with a fresh cache
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/test_published_examples.py
-
-  ci-required:
+  required:
     name: CI required
     if: always()
-    needs: [tooling, build, published-examples]
+    needs: [resolve, check, examples]
     runs-on: ubuntu-24.04
     steps:
-      - name: Require every validation lane to pass
+      - name: Require all CI jobs
         env:
-          RESULTS: ${{ toJSON(needs.*.result) }}
-        run: |
-          python3 - <<'PYCODE'
-          import json, os
-          results = json.loads(os.environ["RESULTS"])
-          if len(results) != 3 or any(result != "success" for result in results):
-              raise SystemExit(f"Required validation failed: {results}")
-          PYCODE
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: test "$RESULTS" = "success success success"

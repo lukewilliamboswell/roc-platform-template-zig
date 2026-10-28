@@ -1,0 +1,39 @@
+= Build and change the host
+
+== Building
+
+`link-inputs.lock.json` selects the external linker inputs. Fetch them once;
+every build verifies their size and SHA-256 and works offline afterwards.
+
+[source,sh]
+----
+zig build fetch-link-inputs
+
+= Build for all supported targets (cross-compilation)
+zig build -Doptimize=ReleaseSafe
+
+= Build for native platform only
+zig build native -Doptimize=ReleaseSafe
+----
+
+== Regenerating Glue
+
+When the platform API changes (e.g. adding or modifying hosted functions in `platform/main.roc`), regenerate the Zig glue:
+
+[source,sh]
+----
+roc glue <path-to-roc>/src/glue/src/ZigGlue.roc ./src/ ./platform/main.roc
+----
+
+This updates `src/roc_platform_abi.zig` with the ABI types and dispatch table matching the platform's hosted functions.
+
+== Bundling
+
+[source,sh]
+----
+blueprint run bundle
+----
+
+This creates a `.tar.zst` bundle of the platform's `.roc` files, the host
+libraries and the locked linker inputs, from an explicit inventory.
+

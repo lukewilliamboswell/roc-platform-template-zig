@@ -1,251 +1,133 @@
 name: Release
 
+# A pull request runs every step with the version 0.0.1-dryrun and publishes
+# nothing. Dispatching from main with a version publishes the tested files.
 on:
   workflow_dispatch:
     inputs:
-      nightly_validation:
-        description: "Validate a nightly candidate without publishing or deploying"
-        type: boolean
-        required: false
-        default: false
-      release_tag:
-        description: 'New package version (e.g., 1.1.0)'
-        required: false
+      version:
+        description: "New platform version, e.g. 1.2.0"
+        required: true
         type: string
   pull_request:
 
-# Ensure only one release workflow runs at a time
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'workflow_dispatch' && format('release-{0}', github.repository) || format('release-validate-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 permissions:
   contents: read
 
+env:
+  VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.0.1-dryrun' }}
+
 jobs:
-  build-and-bundle:
-    name: Build and Bundle Platform
-    runs-on: ubuntu-22.04
+  # The platform names no compiler. A release is built and tested with the
+  # latest nightly, resolved once here and installed by every job, so the
+  # bundle, its tests and the release notes all name one compiler.
+  resolve:
+    name: Resolve the latest Roc nightly
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
-      bundle_filename: ${{ steps.bundle.outputs.bundle_filename }}
-      compiler_pin: ${{ steps.compiler.outputs.pin }}
-      compiler_channel: ${{ steps.release-policy.outputs.compiler-channel }}
-      source_sha: ${{ github.sha }}
-    defaults:
-      run:
-        shell: bash
-
+      nightly-tag: ${{ steps.nightly.outputs.tag }}
     steps:
-      - name: Require a version for publication
-        if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ inputs.release_tag }}
-        run: test -n "$RELEASE_VERSION" || { echo "A release version is required for publication" >&2; exit 1; }
-
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Check release compiler policy
-        if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation
-        id: release-policy
-        uses: lukewilliamboswell/roc-automation/actions/check-release@b60d561cbd53c911b29238b30624827f8487113a
-        with:
-          version: ${{ inputs.release_tag }}
-          compiler-root: platform/main.roc
-          allow-default-branch: 'true'
-          # Temporary bootstrap policy; remove when adopting a stable compiler.
-          allow-nightly-bootstrap: 'true'
-
-      - name: Reject an existing release tag
-        if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation
+      - name: Publish only from main
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "Release from main"
+          exit 1
+      - id: nightly
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.release_tag }}
-        run: |
-          gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$RELEASE_VERSION" > existing-tags.json
-          python3 - <<'PYCODE'
-          import json, os
-          refs = json.load(open("existing-tags.json"))
-          if any(ref["ref"] == "refs/tags/" + os.environ["RELEASE_VERSION"] for ref in refs):
-              raise SystemExit("Release tag already exists; inspect the prior release before recovery")
-          PYCODE
+        run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
 
-      - name: Install Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+  # dist/: the bundle, the examples archive whose examples name the bundle by
+  # its release URL, the SBOM and SHA256SUMS. The archive is tested here
+  # against the bundle served over loopback, before anything is uploaded.
+  build:
+    name: Build and Bundle Platform
+    needs: resolve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          version: 0.16.0
-          use-cache: false
-
-      - name: Read pinned Roc version
-        id: compiler
-        run: |
-          PIN=$(python3 scripts/roc_version.py)
-          echo "ROC_NIGHTLY_TAG=$PIN" >> "$GITHUB_ENV"
-          echo "pin=$PIN" >> "$GITHUB_OUTPUT"
-
-      - name: Install Roc nightly
-        uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+          persist-credentials: false
+      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
         with:
           version: nightly-new-compiler
-          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
-
-      - name: Read linker-input cache identity
-        id: linker-inputs
-        run: |
-          test -f link-inputs.lock.json
-          printf 'key=%s\n' "$(sha256sum link-inputs.lock.json | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore content-addressed linker inputs
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+          nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@a25b5129340b9b2ad1744d20330b8ee4d38a1849
+        with:
+          install-nix: "true"
+          cache: "true"
+          cache-workload: dev
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: .zig-cache/linker-inputs
-          key: linker-inputs-${{ runner.os }}-${{ steps.linker-inputs.outputs.key }}
-      - name: Download a cache miss and verify every cache hit
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/linker_inputs.py fetch
-
-      - name: Validate current source
-        run: bash ci/all_tests.sh
-
-      - name: Build platform with ReleaseSafe
-        run: zig build -Doptimize=ReleaseSafe
-
-      - name: Bundle platform
-        id: bundle
-        run: |
-          # Run bundle.sh and capture output
-          BUNDLE_OUTPUT=$(./bundle.sh 2>&1)
-          echo "$BUNDLE_OUTPUT"
-
-          # Extract the tar.zst filename from "Created: /path/to/HASH.tar.zst" line
-          BUNDLE_PATH=$(echo "$BUNDLE_OUTPUT" | grep "^Created:" | awk '{print $2}')
-          BUNDLE_FILENAME=$(basename "$BUNDLE_PATH")
-
-          if [ -z "$BUNDLE_FILENAME" ]; then
-            echo "Error: Could not extract bundle filename from output"
-            echo "Bundle output was:"
-            echo "$BUNDLE_OUTPUT"
-            exit 1
-          fi
-
-          echo "Bundle created: $BUNDLE_FILENAME"
-          echo "bundle_filename=$BUNDLE_FILENAME" >> "$GITHUB_OUTPUT"
-
-      - name: Package frozen examples for this release
-        if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation
-        env:
-          BUNDLE: ${{ steps.bundle.outputs.bundle_filename }}
-          RELEASE_VERSION: ${{ inputs.release_tag }}
-        run: |
-          python3 scripts/examples_archive.py build \
-            --repo "$GITHUB_REPOSITORY" --version "$RELEASE_VERSION" \
-            --bundle "$BUNDLE" --output "examples-$RELEASE_VERSION.tar.gz"
-
-      - name: Generate bundle SBOM and checksums
-        env:
-          BUNDLE: ${{ steps.bundle.outputs.bundle_filename }}
-        run: |
-          python3 scripts/platform_sbom.py "$BUNDLE" platform.spdx.json
-          sha256sum "$BUNDLE" platform.spdx.json $(ls examples-*.tar.gz 2>/dev/null) > SHA256SUMS
-
-      - name: Upload bundle artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+          key: linker-inputs-${{ runner.os }}-${{ hashFiles('link-inputs.lock.json') }}
+      - run: blueprint run fetch-link-inputs
+      - run: blueprint run build-release
+      - run: blueprint run release -- build "$VERSION"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: platform-bundle
-          path: |
-            ${{ steps.bundle.outputs.bundle_filename }}
-            platform.spdx.json
-            SHA256SUMS
-            examples-*.tar.gz
-          retention-days: 30
+          name: release
+          path: dist/*
+          if-no-files-found: error
 
-  test-bundle:
-    name: Test Bundle
-    needs: build-and-bundle
+  # The same archive and bundle, unchanged, on every other release target.
+  test-archive:
+    name: Test Bundle (${{ matrix.os }})
+    needs: [resolve, build]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - macos-15-intel
-          - macos-15
-          - ubuntu-24.04
-          - ubuntu-24.04-arm
-          - windows-2022
-          - windows-2025
-          # TODO: re-enable windows-11-arm after https://codeberg.org/ziglang/zig/issues/31865 is fixed.
-    runs-on: ${{ matrix.os }}
+        os: [macos-15-intel, macos-15, ubuntu-22.04, ubuntu-24.04-arm, windows-2022, windows-2025]
     defaults:
       run:
         shell: bash
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install Zig
-        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          version: 0.16.0
-          use-cache: false
-
-      - name: Read pinned Roc version
-        run: |
-          PIN=$(python3 scripts/roc_version.py)
-          echo "ROC_NIGHTLY_TAG=$PIN" >> "$GITHUB_ENV"
-
-      - name: Install Roc nightly
-        uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+          persist-credentials: false
+      - uses: ./.github/actions/setup-toolchain
         with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
-
-      - name: Download bundle artifact
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+          nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: platform-bundle
-
-      - name: Run tests with bundled platform
-        run: ci/test_bundled_examples.sh "${{ needs.build-and-bundle.outputs.bundle_filename }}"
+          name: release
+          path: dist
+      - run: roc-stable scripts/release.roc -- test-archive
 
   build-docs:
     name: Build Platform Docs
+    needs: resolve
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        shell: bash
-
+    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Read pinned Roc version
-        run: |
-          PIN=$(python3 scripts/roc_version.py)
-          echo "ROC_NIGHTLY_TAG=$PIN" >> "$GITHUB_ENV"
-
-      - name: Install Roc nightly
-        uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
         with:
           version: nightly-new-compiler
-          nightly-tag: ${{ env.ROC_NIGHTLY_TAG }}
-
-      - name: Generate docs
-        run: |
-          roc docs platform/main.roc --output=generated-docs --no-cache
-          touch generated-docs/.nojekyll
-
-      - name: Upload docs artifact
-        if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
+          nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@a25b5129340b9b2ad1744d20330b8ee4d38a1849
+      - run: |
+          blueprint run docs -- --docs-version "$VERSION"
+          touch .docs-out/site/.nojekyll
+      - if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: generated-docs
+          path: .docs-out/site
 
-  attest-platform:
+  attest:
     name: Attest tested platform bundle
-    needs: [build-and-bundle, test-bundle, build-docs]
-    if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation && github.ref == 'refs/heads/main'
+    needs: [build, test-archive, build-docs]
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -255,21 +137,21 @@ jobs:
       # No source checkout or build commands in the signing job.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: platform-bundle
-      - run: sha256sum -c SHA256SUMS
-      - name: Attest provenance
-        id: provenance
+          name: release
+      - id: bundle
+        run: |
+          sha256sum -c SHA256SUMS
+          echo "path=$(ls *.tar.zst)" >> "$GITHUB_OUTPUT"
+      - id: provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: ${{ needs.build-and-bundle.outputs.bundle_filename }}
-      - name: Attest SBOM
-        id: sbom
+          subject-path: ${{ steps.bundle.outputs.path }}
+      - id: sbom
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: ${{ needs.build-and-bundle.outputs.bundle_filename }}
+          subject-path: ${{ steps.bundle.outputs.path }}
           sbom-path: platform.spdx.json
-      - name: Collect signatures
-        env:
+      - env:
           PROVENANCE: ${{ steps.provenance.outputs.bundle-path }}
           SBOM: ${{ steps.sbom.outputs.bundle-path }}
         run: |
@@ -278,96 +160,74 @@ jobs:
           cp "$SBOM" attestations/platform-sbom.sigstore.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: platform-attestations
+          name: attestations
           path: attestations/*
           if-no-files-found: error
 
-  create-release:
+  publish:
     name: Create GitHub Release
-    needs: [build-and-bundle, test-bundle, build-docs, attest-platform]
+    needs: [resolve, build, attest]
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    # Only run on manual trigger
-    if: github.event_name == 'workflow_dispatch' && !inputs.nightly_validation && github.ref == 'refs/heads/main'
     permissions:
       contents: write
-
     steps:
-      - name: Download bundle artifact
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: platform-bundle
-
-      - name: Download attestations
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+          name: release
+          path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: platform-attestations
-
-      - name: Create GitHub Release
+          name: attestations
+          path: dist
+      - name: Verify the signatures and write the notes
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.release_tag }}
-          SOURCE_SHA: ${{ needs.build-and-bundle.outputs.source_sha }}
-          BUNDLE_FILE: ${{ needs.build-and-bundle.outputs.bundle_filename }}
-          COMPILER_PIN: ${{ needs.build-and-bundle.outputs.compiler_pin }}
-          COMPILER_CHANNEL: ${{ needs.build-and-bundle.outputs.compiler_channel }}
+          NIGHTLY: ${{ needs.resolve.outputs.nightly-tag }}
         run: |
-          test -f "$BUNDLE_FILE"
-          sha256sum -c SHA256SUMS
-          gh attestation verify "$BUNDLE_FILE" --repo "$GITHUB_REPOSITORY" --bundle platform-provenance.sigstore.json --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --source-digest "$SOURCE_SHA" --source-ref refs/heads/main
-          gh attestation verify "$BUNDLE_FILE" --repo "$GITHUB_REPOSITORY" --bundle platform-sbom.sigstore.json --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --source-digest "$SOURCE_SHA" --source-ref refs/heads/main --predicate-type https://spdx.dev/Document/v2.3
-          python3 - <<'PYCODE'
-          import os
-          from pathlib import Path
-          env = os.environ
-          url = f"https://github.com/{env['GITHUB_REPOSITORY']}/releases/download/{env['RELEASE_VERSION']}/{env['BUNDLE_FILE']}"
-          Path("release-notes.md").write_text(
-              f"Platform built with Zig 0.16.0 and Roc `{env['COMPILER_PIN']}`.\n\n"
-              f"Compiler policy: `{env['COMPILER_CHANNEL']}` (exact nightly bootstrap; no stable compiler support claim).\n\n"
-              f"Tested source: `{env['SOURCE_SHA']}`.\n\n"
-              f"Platform bundle: {url}\n\n"
-              f"Frozen examples: examples-{env['RELEASE_VERSION']}.tar.gz (headers point at the bundle above).\n\n"
-              "SHA-256 digest is attached in SHA256SUMS.\n"
-          )
-          PYCODE
-          # Creating a new ref fails if another publisher claimed this tag.
-          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-            -f "ref=refs/tags/$RELEASE_VERSION" -f "sha=$SOURCE_SHA"
-          gh release create "$RELEASE_VERSION" "$BUNDLE_FILE" "examples-$RELEASE_VERSION.tar.gz" SHA256SUMS platform.spdx.json platform-*.sigstore.json \
-            --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$RELEASE_VERSION" \
-            --generate-notes --notes-file release-notes.md
-          gh release edit "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --draft=false
-          gh release verify "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY"
+          cd dist
+          bundle=$(ls *.tar.zst)
+          for kind in provenance sbom; do
+            extra=$([ $kind = sbom ] && echo --predicate-type=https://spdx.dev/Document/v2.3 || true)
+            gh attestation verify "$bundle" --repo "$GITHUB_REPOSITORY" --bundle "platform-$kind.sigstore.json" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --source-digest "$GITHUB_SHA" --source-ref refs/heads/main $extra
+          done
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION/$bundle"
+          {
+            echo "Platform built with Zig 0.17.0 and tested with Roc \`$NIGHTLY\`."
+            echo
+            echo "    app [main!] { pf: platform \"$url\" }"
+            echo
+            echo "Starter examples: roc-platform-template-zig-examples-$VERSION.zip. SHA-256 digests are in SHA256SUMS."
+          } > ../release-notes.md
+      - uses: lukewilliamboswell/roc-automation/actions/publish-release@a25b5129340b9b2ad1744d20330b8ee4d38a1849
+        with:
+          version: ${{ env.VERSION }}
+          prerelease: "false"
+          notes-file: release-notes.md
+          assets: dist/*
 
   deploy-docs:
     name: Deploy Docs to GitHub Pages
-    needs: [build-docs, create-release]
+    needs: [build-docs, publish]
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    if: (github.event_name == 'workflow_dispatch' && !inputs.nightly_validation)
     permissions:
       pages: write
       id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
-      - name: Deploy docs
-        id: deployment
+      - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
 
-  bundle-required:
+  required:
     name: Bundle required
     if: always()
-    needs: [build-and-bundle, test-bundle, build-docs]
+    needs: [resolve, build, test-archive, build-docs]
     runs-on: ubuntu-24.04
     steps:
-      - name: Require every validation lane to pass
-        env:
-          RESULTS: ${{ toJSON(needs.*.result) }}
-        run: |
-          python3 - <<'PYCODE'
-          import json, os
-          results = json.loads(os.environ["RESULTS"])
-          if len(results) != 3 or any(result != "success" for result in results):
-              raise SystemExit(f"Required validation failed: {results}")
-          PYCODE
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: test "$RESULTS" = "success success success success"
