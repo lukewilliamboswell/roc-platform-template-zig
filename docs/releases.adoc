@@ -14,3 +14,13 @@ URL instead of `../../platform/main.roc`. Repository examples are never edited
 after a release. Never move an existing tag or replace a released asset; a
 repair is a new release.
 
+
+== Prepare and validate locally
+
+Write `docs/releases/VERSION.adoc`, opening with
+`= roc-platform-template-zig VERSION` and using `{platform-url}` for installation.
+Dry runs use the newest authored notes. The shared utility creates the examples,
+API documentation archive and rendered notes; the repository supplies the host,
+bundle inventory and platform SBOM. See xref:contributing.adoc[contributor tasks].
+Generate SHA256SUMS after packaging and SBOM generation, excluding SHA256SUMS
+itself. Never overwrite an existing release output directory.

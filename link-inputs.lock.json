@@ -2,22 +2,22 @@
   "schema_version": 1,
   "kind": "roc-zig-link-inputs",
   "repository": "lukewilliamboswell/roc-platform-template-zig",
-  "release": "link-inputs-sha256-2889e4c509a3a247cb2d38ae1400ea71f87ec79c6d6cec58cd7a953e051bdf08",
+  "release": "link-inputs-sha256-0851322389816b634a9c35b09d655685ba1b053f5b15e262c165d9b65899934a",
   "manifest": {
     "asset": "build-input-release.json",
-    "sha256": "2889e4c509a3a247cb2d38ae1400ea71f87ec79c6d6cec58cd7a953e051bdf08"
+    "sha256": "0851322389816b634a9c35b09d655685ba1b053f5b15e262c165d9b65899934a"
   },
   "source": {
-    "input_fingerprint": "a0a3a4bd00e19228089ae1fcab72f5760e75d373a994db82c391f27560283001",
-    "ref": "refs/heads/windows-startup-inputs",
+    "input_fingerprint": "255025d5e7debfa8b3dcdb82e4aaf452e6de8293bdbbdd0bbd846781f309a8f3",
+    "ref": "refs/heads/upgrade-blueprint-0.10-tools-0.7",
     "repository": "lukewilliamboswell/roc-platform-template-zig",
-    "sha": "5db8f9b9e661f5cbde0254d3520366ef4eab8bd4",
+    "sha": "cf74874eb4cc2bf0797503848db7aebfd2b89e79",
     "workflow": "lukewilliamboswell/roc-platform-template-zig/.github/workflows/linker-inputs.yml"
   },
   "targets": {
     "all": {
       "asset": "link-inputs-all.tar",
-      "sha256": "a057de193f8c1f6e7f3bfc6f1999853e6c2a868567913af9384d7ecb99c5462a",
+      "sha256": "c4fedd99309cae249f1a6abfb03256b91d985fc10a9277d94847a98e010ed55b",
       "size": 8253440
     }
   }

@@ -67,6 +67,8 @@ LinkInputs := [].{
 	## The committed files whose git blobs identify the producer of a release.
 	producer_inputs : List(Str)
 	producer_inputs = [
+		"Blueprint.roc",
+		"Blueprint.lock",
 		"linker-inputs/sources.json",
 		"linker-inputs/macos-interfaces/libSystem.json",
 		"linker-inputs/macos-interfaces/PROVENANCE.md",

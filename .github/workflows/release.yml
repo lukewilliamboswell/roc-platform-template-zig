@@ -10,6 +10,8 @@ on:
         required: true
         type: string
   pull_request:
+  push:
+    branches: [main]
 
 concurrency:
   group: ${{ github.event_name == 'workflow_dispatch' && format('release-{0}', github.repository) || format('release-validate-{0}', github.ref) }}
@@ -19,6 +21,7 @@ permissions:
   contents: read
 
 env:
+  RP_AUTOMATION: lukewilliamboswell/roc-automation@8acff758d5d73210f1731bed75adb9322f5e773d
   VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.0.1-dryrun' }}
 
 jobs:
@@ -42,9 +45,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: echo "tag=$(gh api repos/roc-lang/nightlies/releases/latest --jq .tag_name)" >> "$GITHUB_OUTPUT"
 
-  # dist/: the bundle, the examples archive whose examples name the bundle by
-  # its release URL, the SBOM and SHA256SUMS. The archive is tested here
-  # against the bundle served over loopback, before anything is uploaded.
+  # Build once; the native matrix tests these exact release files over loopback.
   build:
     name: Build and Bundle Platform
     needs: resolve
@@ -58,9 +59,8 @@ jobs:
         with:
           version: nightly-new-compiler
           nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@a25b5129340b9b2ad1744d20330b8ee4d38a1849
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8acff758d5d73210f1731bed75adb9322f5e773d
         with:
-          install-nix: "true"
           cache: "true"
           cache-workload: dev
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
@@ -69,12 +69,34 @@ jobs:
           key: linker-inputs-${{ runner.os }}-${{ hashFiles('link-inputs.lock.json') }}
       - run: blueprint run fetch-link-inputs
       - run: blueprint run build-release
-      - run: blueprint run release -- build "$VERSION"
+      - run: blueprint run check
+      - run: blueprint run test-host
+      - run: blueprint run test-expects
+      - run: blueprint run release-test -- test-examples
+      - run: blueprint run bundle -- --output-dir .zig-cache/release-platform
+      - run: blueprint run release-package -- build "$VERSION" --platform-bundle .zig-cache/release-platform
+      - run: blueprint run sbom
+      - run: cd dist && sha256sum -- * > SHA256SUMS
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release
           path: dist/*
           if-no-files-found: error
+
+      - run: |
+          blueprint run docs-manual -- --docs-version "$VERSION"
+          unzip -q "dist/roc-platform-template-zig-docs-$VERSION.zip" -d .zig-cache/release-api
+          cp -R ".zig-cache/release-api/$VERSION" .docs-out/site/api
+          touch .docs-out/site/.nojekyll
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: manual-preview
+          path: .docs-out/site
+          if-no-files-found: error
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: .docs-out/site
 
   # The same archive and bundle, unchanged, on every other release target.
   test-archive:
@@ -93,40 +115,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-toolchain
-        with:
-          nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release
-          path: dist
-      - run: roc-stable scripts/release.roc -- test-archive
-
-  build-docs:
-    name: Build Platform Docs
-    needs: resolve
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
       - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
         with:
           version: nightly-new-compiler
           nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@a25b5129340b9b2ad1744d20330b8ee4d38a1849
-      - run: |
-          blueprint run docs -- --docs-version "$VERSION"
-          touch .docs-out/site/.nojekyll
-      - if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8acff758d5d73210f1731bed75adb9322f5e773d
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          path: .docs-out/site
+          name: release
+          path: dist
+      - run: blueprint run release-test -- test-archive
 
   attest:
     name: Attest tested platform bundle
-    needs: [build, test-archive, build-docs]
+    needs: [build, test-archive]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
@@ -180,7 +182,7 @@ jobs:
         with:
           name: attestations
           path: dist
-      - name: Verify the signatures and write the notes
+      - name: Verify the signatures
         env:
           GH_TOKEN: ${{ github.token }}
           NIGHTLY: ${{ needs.resolve.outputs.nightly-tag }}
@@ -192,24 +194,16 @@ jobs:
             gh attestation verify "$bundle" --repo "$GITHUB_REPOSITORY" --bundle "platform-$kind.sigstore.json" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --source-digest "$GITHUB_SHA" --source-ref refs/heads/main $extra
           done
-          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION/$bundle"
-          {
-            echo "Platform built with Zig 0.17.0 and tested with Roc \`$NIGHTLY\`."
-            echo
-            echo "    app [main!] { pf: platform \"$url\" }"
-            echo
-            echo "Starter examples: roc-platform-template-zig-examples-$VERSION.zip. SHA-256 digests are in SHA256SUMS."
-          } > ../release-notes.md
-      - uses: lukewilliamboswell/roc-automation/actions/publish-release@a25b5129340b9b2ad1744d20330b8ee4d38a1849
+      - uses: lukewilliamboswell/roc-automation/actions/publish-release@8acff758d5d73210f1731bed75adb9322f5e773d
         with:
           version: ${{ env.VERSION }}
           prerelease: "false"
-          notes-file: release-notes.md
+          notes-file: dist/release-notes.md
           assets: dist/*
 
   deploy-docs:
     name: Deploy Docs to GitHub Pages
-    needs: [build-docs, publish]
+    needs: [build, publish]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
@@ -225,9 +219,19 @@ jobs:
   required:
     name: Bundle required
     if: always()
-    needs: [resolve, build, test-archive, build-docs]
+    needs: [resolve, build, test-archive]
     runs-on: ubuntu-24.04
     steps:
       - env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
-        run: test "$RESULTS" = "success success success success"
+        run: test "$RESULTS" = "success success success"
+
+  ci-required:
+    name: CI required
+    if: always()
+    needs: [resolve, build]
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: test "$RESULTS" = "success success"

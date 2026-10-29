@@ -1,0 +1,11 @@
+= roc-platform-template-zig 1.1.1
+
+Updated the Roc nightly, generated ABI and release automation.
+
+[source,roc]
+----
+app [main!] { pf: platform "{platform-url}" }
+----
+
+See the attached examples archive and SHA256SUMS. The original 1.1.1 release used Zig 0.16.0 and Roc nightly-2026-10-04-130536d.
+Dry runs render these historical notes with the candidate URL; current build tooling is recorded separately.
