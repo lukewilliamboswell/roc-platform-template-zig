@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8acff758d5d73210f1731bed75adb9322f5e773d
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@57558c56713577fd340ad3c7d0fa992d1793b7bc
       - name: Install pinned normalization and signature tools
         run: |
           PACKAGE=$(jq -r .objcopy.package runtime/sources.json)
@@ -77,7 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {persist-credentials: false, ref: '${{ github.sha }}'}
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8acff758d5d73210f1731bed75adb9322f5e773d
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@57558c56713577fd340ad3c7d0fa992d1793b7bc
       - name: Bind candidate to the publisher-selected commit
         env: {EXPECTED_SHA: '${{ inputs.expected_sha }}'}
         run: test -n "$EXPECTED_SHA" && test "$EXPECTED_SHA" = "$GITHUB_SHA"

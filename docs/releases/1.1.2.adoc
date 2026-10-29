@@ -1,0 +1,23 @@
+= roc-platform-template-zig 1.1.2
+
+The platform adopts Blueprint 0.11.0 and reviewed roc-automation installers and
+workflows. Blueprint supports projects that combine scoped Unix Nix tools with
+provider-free Windows tasks. The template keeps its locked Zig 0.17.0 downloads
+and the native utilities from roc-automation `tools-0.7.0`.
+
+[source,roc]
+----
+app [main!] { pf: platform "{platform-url}" }
+----
+
+The platform and its examples name no compiler. Releases build and test with
+the latest Roc nightly selected once per release run; repository scripts use
+the fixed `roc-stable` compiler, `nightly-2026-10-09-258ab27`. The release metadata
+records the compiler used for the published bundle.
+
+The examples now ship as `roc-platform-template-zig-examples-1.1.2.zip`.
+The archive includes the examples and `spec.json`, and each example names the
+published platform bundle URL. The same archive is checked, built and executed
+on Linux x64 and arm64, Apple Silicon and Intel macOS, and both Windows runners.
+The release also includes API documentation, rendered notes, an SBOM, checksums
+and attestations.
