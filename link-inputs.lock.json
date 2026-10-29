@@ -2,22 +2,22 @@
   "schema_version": 1,
   "kind": "roc-zig-link-inputs",
   "repository": "lukewilliamboswell/roc-platform-template-zig",
-  "release": "link-inputs-sha256-e8564cfd58cb05636f4e51a903955ef2181e61d71a420dbc20b02eb65ceb74e9",
+  "release": "link-inputs-sha256-d42ee8796b262c6b4430daa0c8f5e56456c567ea1c405022f4e7dc2174a262e5",
   "manifest": {
     "asset": "build-input-release.json",
-    "sha256": "e8564cfd58cb05636f4e51a903955ef2181e61d71a420dbc20b02eb65ceb74e9"
+    "sha256": "d42ee8796b262c6b4430daa0c8f5e56456c567ea1c405022f4e7dc2174a262e5"
   },
   "source": {
-    "input_fingerprint": "c592882dcdc4a6148b2ff90f08bae575a611ea6a4fcb85cf9462f830110633b5",
-    "ref": "refs/heads/release/1.1.2",
+    "input_fingerprint": "395439db1311cd66f7c25f7ec993728829bd5ba67daae17d66185e02881f0d12",
+    "ref": "refs/heads/fix/shared-native-compatibility",
     "repository": "lukewilliamboswell/roc-platform-template-zig",
-    "sha": "f9e09aaafe3a5b3b08335c1f8acb407b094fde2f",
+    "sha": "57248a2efd505acace49f13cfe79eb38f205b457",
     "workflow": "lukewilliamboswell/roc-platform-template-zig/.github/workflows/linker-inputs.yml"
   },
   "targets": {
     "all": {
       "asset": "link-inputs-all.tar",
-      "sha256": "1d6790cd8bc4ea1422bedcc31f7f067f4399c58861569df4a47ddf1ce839cf7d",
+      "sha256": "36bc9b054b2f93478034e4bce326f5d581a972045bd29534c9a72ed1cf74bd37",
       "size": 8253440
     }
   }
