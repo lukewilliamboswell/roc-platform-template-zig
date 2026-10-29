@@ -8,8 +8,6 @@ name: Nightly compatibility
 # issue records a failure and the next pass closes it. It changes nothing in
 # this repository: a failure means the released platform needs a patch release.
 #
-# macos-15-intel (x64mac) is a release target the shared runner does not
-# accept, so release.yml covers it.
 on:
   schedule:
     - cron: '23 14 * * *'
@@ -31,8 +29,8 @@ jobs:
     permissions:
       contents: read
       issues: write
-    uses: lukewilliamboswell/roc-automation/.github/workflows/nightly-compatibility.yml@a25b5129340b9b2ad1744d20330b8ee4d38a1849
+    uses: lukewilliamboswell/roc-automation/.github/workflows/nightly-compatibility.yml@8acff758d5d73210f1731bed75adb9322f5e773d
     with:
       nightly-tag: ${{ inputs.nightly-tag || '' }}
       release-tag: ${{ inputs.release-tag || '' }}
-      runners: '["ubuntu-22.04", "ubuntu-24.04-arm", "macos-15", "windows-2022", "windows-2025"]'
+      runners: '["ubuntu-22.04", "ubuntu-24.04-arm", "macos-15", "macos-15-intel", "windows-2022", "windows-2025"]'

@@ -172,13 +172,15 @@ pub fn build(b: *std.Build) void {
     });
 
     const run_host_tests = b.addRunArtifact(host_tests);
+    b.step("test-host", "Run host unit tests").dependOn(&run_host_tests.step);
 
-    // The examples against tests/spec.json, run by the tooling compiler.
+    // Shared examples runner against tests/spec.json and the native host.
     const run_integration = b.addSystemCommand(&.{
-        "roc-stable",
-        "scripts/test_examples.roc",
+        "blueprint",
+        "run",
+        "release-test",
         "--",
-        "--no-build",
+        "test-examples",
     });
     // Integration tests need the native platform library to be built first
     run_integration.step.dependOn(&copy_native.step);

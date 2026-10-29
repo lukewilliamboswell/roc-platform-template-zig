@@ -24,106 +24,134 @@
 		(system "aarch64-darwin")
 		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-09-258ab27/roc_nightly-macos_apple_silicon-2026-10-09-258ab27.tar.gz"))
 		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-09-258ab27")) (
+		(name "roc-stable")
+		(obtained Published)
+		(served ())
+		(sha256 "ac04c74946e14cbf878b6344b6e7c79aea741f0868e03f380ee307db62507776")
+		(size 71499802)
+		(system "x86_64-darwin")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-09-258ab27/roc_nightly-macos_x86_64-2026-10-09-258ab27.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-09-258ab27")) (
+		(name "roc-stable")
+		(obtained Published)
+		(served ())
+		(sha256 "353af13e52cf28edb51ac8ea1b3237b33bf1045948b002127ca073a6e37efefb")
+		(size 68140530)
+		(system "x86_64-windows")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-09-258ab27/roc_nightly-windows_x86_64-2026-10-09-258ab27.zip"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-09-258ab27")) (
+		(name "zig")
+		(obtained Computed)
+		(served ("ziglang.org"))
+		(sha256 "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026")
+		(size 57332648)
+		(system "x86_64-linux")
+		(urls ("https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"))
+		(witness "")) (
+		(name "zig")
+		(obtained Computed)
+		(served ("ziglang.org"))
+		(sha256 "9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8")
+		(size 52877280)
+		(system "aarch64-linux")
+		(urls ("https://ziglang.org/download/0.17.0/zig-aarch64-linux-0.17.0.tar.xz"))
+		(witness "")) (
+		(name "zig")
+		(obtained Computed)
+		(served ("ziglang.org"))
+		(sha256 "b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a")
+		(size 53985220)
+		(system "aarch64-darwin")
+		(urls ("https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz"))
+		(witness "")) (
+		(name "zig")
+		(obtained Computed)
+		(served ("ziglang.org"))
+		(sha256 "4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6")
+		(size 59317572)
+		(system "x86_64-darwin")
+		(urls ("https://ziglang.org/download/0.17.0/zig-x86_64-macos-0.17.0.tar.xz"))
+		(witness "")) (
+		(name "zig")
+		(obtained Computed)
+		(served ("ziglang.org"))
+		(sha256 "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428")
+		(size 100268137)
+		(system "x86_64-windows")
+		(urls ("https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip"))
+		(witness "")) (
 		(name "roc-docs")
 		(obtained Both)
 		(served ("release-assets.githubusercontent.com"))
-		(sha256 "64fa31084c9efab1ccf9dfd4bd33f8a3bd7e41c6344fde447f5a3bbd55bca78d")
-		(size 22071488)
+		(sha256 "3e5ef524aa17eeb81538c639ad4959bf4690b178898930ea0a42a2cd8bf7312d")
+		(size 22216616)
 		(system "x86_64-linux")
-		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.4.0/roc-docs-x86_64-linux"))
-		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.4.0")) (
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.7.0/roc-docs-x86_64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.7.0")) (
 		(name "roc-docs")
 		(obtained Published)
 		(served ())
-		(sha256 "0f50e600197ff8906b6d913bcd145a1a256573df8b19d51883a20cacde4f6e11")
-		(size 17334536)
+		(sha256 "a8f82f1565d8bae97b956df5d1903da8e62114af57eb8b40eb1aad084518b5f7")
+		(size 17440136)
 		(system "aarch64-linux")
-		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.4.0/roc-docs-aarch64-linux"))
-		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.4.0")) (
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.7.0/roc-docs-aarch64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.7.0")) (
 		(name "roc-docs")
 		(obtained Published)
 		(served ())
-		(sha256 "7025e6bcb904d439908076219b6a7b6b3e84d08d71d01f68ef390beb05737b29")
-		(size 17286480)
+		(sha256 "181817a0673f5036b75d3d29707ef665b45ea7f3ccfe9bbc35362a72639b40fc")
+		(size 17396432)
 		(system "aarch64-darwin")
-		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.4.0/roc-docs-aarch64-darwin"))
-		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.4.0"))))
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.7.0/roc-docs-aarch64-darwin"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.7.0")) (
+		(name "release-package")
+		(obtained Both)
+		(served ("release-assets.githubusercontent.com"))
+		(sha256 "bf91e6744923145847657cae174c0324ca00794b1b1fcbec768ef6d5086834f5")
+		(size 3119760)
+		(system "x86_64-linux")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.7.0/release-package-x86_64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.7.0")) (
+		(name "release-package")
+		(obtained Published)
+		(served ())
+		(sha256 "46933545000408adfebe0cc63a20b93075a0be7f20a9318a8d2246a3530f551a")
+		(size 2183056)
+		(system "aarch64-linux")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.7.0/release-package-aarch64-linux"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.7.0")) (
+		(name "release-package")
+		(obtained Published)
+		(served ())
+		(sha256 "6ab66358112636b82cd116d136182176e3c7e6a2e1ee848d00ea80ceb65d10f3")
+		(size 1878960)
+		(system "aarch64-darwin")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.7.0/release-package-aarch64-darwin"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.7.0")) (
+		(name "release-package")
+		(obtained Published)
+		(served ())
+		(sha256 "5838b10e89d02593475d358a844a86b322802219fe04687d795cee3ef7ab14ac")
+		(size 2199392)
+		(system "x86_64-darwin")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.7.0/release-package-x86_64-darwin"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.7.0")) (
+		(name "release-package")
+		(obtained Published)
+		(served ())
+		(sha256 "f610a94e4d7259b0ccbe1ced58a185e1c252a62ed0d429b74f2044806501b217")
+		(size 5013504)
+		(system "x86_64-windows")
+		(urls ("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.7.0/release-package-x86_64-windows"))
+		(witness "https://api.github.com/repos/lukewilliamboswell/roc-automation/releases/tags/tools-0.7.0"))))
 	(format (
 		(major 2)
 		(minor 0)))
-	(hints ((
-		(provider "nix")
-		(value (Attrs ((
-			(name "identity")
-			(value (Attrs ((
-				(name "inputs")
-				(value (Attrs ((
-					(name "nix")
-					(value (Attrs ((
-						(name "ref")
-						(value (Str "github:NixOS/nixpkgs/nixos-unstable"))) (
-						(name "kind")
-						(value (Str "packages"))) (
-						(name "flake")
-						(value (Bool true))))))))))) (
-				(name "overlays")
-				(value (Attrs ()))))))) (
-			(name "graph")
-			(value (Attrs ((
-				(name "root")
-				(value (Str "root"))) (
-				(name "version")
-				(value (Int 7))) (
-				(name "nodes")
-				(value (Attrs ((
-					(name "nix")
-					(value (Attrs ((
-						(name "locked")
-						(value (Attrs ((
-							(name "lastModified")
-							(value (Int 1793110635))) (
-							(name "narHash")
-							(value (Str "sha256-dhoW6VgFWlaodSY5jrBn+CF2FLmaUvDVgM7+C7T2+NM="))) (
-							(name "owner")
-							(value (Str "NixOS"))) (
-							(name "repo")
-							(value (Str "nixpkgs"))) (
-							(name "rev")
-							(value (Str "31ecbaca1bdefa45dffc409f0250bd8039ea0010"))) (
-							(name "type")
-							(value (Str "github"))))))) (
-						(name "original")
-						(value (Attrs ((
-							(name "owner")
-							(value (Str "NixOS"))) (
-							(name "ref")
-							(value (Str "nixos-unstable"))) (
-							(name "repo")
-							(value (Str "nixpkgs"))) (
-							(name "type")
-							(value (Str "github"))))))))))) (
-					(name "root")
-					(value (Attrs ((
-						(name "inputs")
-						(value (Attrs ((
-							(name "nix")
-							(value (Str "nix"))) (
-							(name "nixpkgs")
-							(value (List ((Str "nix")))))))))))))))))))))))))))
+	(hints ())
 	(intent (
 		(build_sources ())
 		(inputs ())
 		(overlays ())
 		(resolvers ())
-		(sources ((
-			(name "nix")
-			(provider (
-				(name "nix")
-				(ref "github:NixOS/nixpkgs/nixos-unstable")
-				(version 1))))))))
-	(sources ((
-		(digest "sha256:761a16e958055a56a87526398eb067f8217614b99a52f0d580cefe0bb4f6f8d3")
-		(name "nix")
-		(provider "nix")
-		(ref "github:NixOS/nixpkgs/nixos-unstable")
-		(rev "31ecbaca1bdefa45dffc409f0250bd8039ea0010")))))
+		(sources ())))
+	(sources ()))

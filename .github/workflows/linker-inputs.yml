@@ -33,14 +33,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - id: stable
-        run: echo "tag=$(sed -n 's/.*Fetch("roc-stable", Recipes.roc_nightly("\(nightly-[0-9a-f-]*\)")).*/\1/p' Blueprint.roc)" >> "$GITHUB_OUTPUT"
-      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
-        with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ steps.stable.outputs.tag }}
-      # The producer scripts run on the tooling compiler Blueprint.roc names.
-      - run: ln -s "$(command -v roc)" "$RUNNER_TEMP/roc-stable" && echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8acff758d5d73210f1731bed75adb9322f5e773d
       - name: Install pinned normalization and signature tools
         run: |
           PACKAGE=$(jq -r .objcopy.package runtime/sources.json)
@@ -48,10 +41,10 @@ jobs:
           sudo apt-get install -y minisign "$PACKAGE"
       - name: Test archive, inventory, and extraction safety
         run: |
-          roc-stable test scripts/src/LinkInputs.roc
-          roc-stable test scripts/src/JsonValue.roc
+          blueprint run link-input-tests
+          blueprint run json-value-tests
       - name: Build from verified sources and project-authored interface metadata
-        run: roc-stable scripts/build_link_inputs.roc -- build --output .zig-cache/linker-inputs-dist
+        run: blueprint run link-inputs -- build --output .zig-cache/linker-inputs-dist
       - name: Read version
         id: metadata
         run: |
@@ -84,20 +77,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {persist-credentials: false, ref: '${{ github.sha }}'}
-      - id: stable
-        run: echo "tag=$(sed -n 's/.*Fetch("roc-stable", Recipes.roc_nightly("\(nightly-[0-9a-f-]*\)")).*/\1/p' Blueprint.roc)" >> "$GITHUB_OUTPUT"
-      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
-        with:
-          version: nightly-new-compiler
-          nightly-tag: ${{ steps.stable.outputs.tag }}
-      # The producer scripts run on the tooling compiler Blueprint.roc names.
-      - run: ln -s "$(command -v roc)" "$RUNNER_TEMP/roc-stable" && echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8acff758d5d73210f1731bed75adb9322f5e773d
       - name: Bind candidate to the publisher-selected commit
         env: {EXPECTED_SHA: '${{ inputs.expected_sha }}'}
         run: test -n "$EXPECTED_SHA" && test "$EXPECTED_SHA" = "$GITHUB_SHA"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with: {name: linker-inputs-1, path: aggregate}
-      - run: roc-stable scripts/build_link_inputs.roc -- release --source aggregate --output release
+      - run: blueprint run link-inputs -- release --source aggregate --output release
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: |

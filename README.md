@@ -6,7 +6,7 @@ A template for building Roc platforms with Zig.
 
 ## Quick start
 
-Install the latest Roc nightly and roc-blueprint. Blueprint supplies Zig 0.17.0 and the fixed tooling compiler, `roc-stable`. Run these commands from the checkout:
+Install the latest Roc nightly and roc-blueprint 0.10.0. Blueprint supplies Zig 0.17.0 and the fixed tooling compiler, `roc-stable`. Host builds also require Git, coreutils, tar, gzip, zip, unzip and GitHub CLI on PATH. Run these commands from the checkout:
 
 ```sh
 blueprint run fetch-link-inputs

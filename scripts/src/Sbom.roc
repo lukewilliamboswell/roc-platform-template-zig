@@ -1,59 +1,5 @@
-## Pure decisions for a platform release: its version, asset names and URLs,
-## the one line an archived example changes, and the documents it publishes.
-Release := [].{
-
-	## The relative path every repository example names the platform by.
-	platform_source : Str
-	platform_source = "../../platform/main.roc"
-
-	## The version a pull request's dry run releases. Roc rejects `0.0.0` in a
-	## package URL.
-	dry_run : Str
-	dry_run = "0.0.1-dryrun"
-
-	## A plain `MAJOR.MINOR.PATCH` release, or the dry run.
-	valid_version : Str -> Bool
-	valid_version = |version|
-		version == dry_run or match version.split_on(".") {
-			[major, minor, patch] => [major, minor, patch].all(number)
-			_ => Bool.False
-		}
-
-	examples_archive : Str, Str -> Str
-	examples_archive = |name, version| "${name}-examples-${version}.zip"
-
-	bundle_url : Str, Str, Str -> Str
-	bundle_url = |repository, version, bundle| "https://github.com/${repository}/releases/download/${version}/${bundle}"
-
-	## An archived example's source: the same file with the platform named by
-	## its release URL. The relative platform path must appear exactly once.
-	with_platform : Str, Str -> Try(Str, Str)
-	with_platform = |source, url|
-		match source.split_on("platform \"${platform_source}\"") {
-			[before, after] => Ok("${before}platform \"${url}\"${after}")
-			_ => Err("must name the platform as \"${platform_source}\" exactly once")
-		}
-
-	readme : Str, Str, Str -> Str
-	readme = |name, version, url|
-		Str.join_with(
-			[
-				"# ${name} ${version} examples",
-				"",
-				"These examples depend on the platform released as ${name} ${version}:",
-				"",
-				"    ${url}",
-				"",
-				"Run one with the latest Roc nightly, for example:",
-				"",
-				"    roc examples/hello_world/main.roc",
-				"",
-				"`spec.json` records what each example prints; it is the suite the",
-				"release was tested with.",
-				"",
-			],
-			"\n",
-		)
+## Platform-specific SPDX document.
+Sbom := [].{
 
 	## JSON text built from already rendered values, with two-space
 	## indentation; an object keeps its keys in the order given.
@@ -99,7 +45,7 @@ Release := [].{
 
 	## The platform's SPDX document: the bundle, the linker-input release it
 	## depends on with every file it contains, and the tools that built it.
-	Sbom : {
+	Document : {
 		name : Str,
 		commit : Str,
 		created : Str,
@@ -110,7 +56,7 @@ Release := [].{
 		roc : Str,
 	}
 
-	sbom : Sbom -> Str
+	sbom : Document -> Str
 	sbom = |s| {
 		input_files = s.inputs.files.map_with_index(|file, index| (file, "SPDXRef-input-file-${index.to_str()}"))
 		platform_files = s.platform_files.map_with_index(|file, index| (file, "SPDXRef-platform-file-${index.to_str()}"))
@@ -143,24 +89,11 @@ Release := [].{
 	}
 }
 
-number : Str -> Bool
-number = |part| {
-	bytes = part.to_utf8()
-	!bytes.is_empty() and bytes.all(|byte| byte >= '0' and byte <= '9') and (bytes.len() == 1 or bytes.first() != Ok('0'))
-}
-
 sha256_checksum : Str -> Str
-sha256_checksum = |sha256| Release.object([("algorithm", Release.text("SHA256")), ("checksumValue", Release.text(sha256))])
+sha256_checksum = |sha256| Sbom.object([("algorithm", Sbom.text("SHA256")), ("checksumValue", Sbom.text(sha256))])
 
 # A rendered value placed one level deeper.
 nested : Str -> Str
 nested = |value| value.replace_each("\n", "\n  ")
 
-expect Release.valid_version("1.2.0") and Release.valid_version("0.0.1-dryrun") and Release.valid_version("10.0.3")
-expect !Release.valid_version("1.2") and !Release.valid_version("v1.2.0") and !Release.valid_version("01.2.0") and !Release.valid_version("1.2.0-rc1")
-expect Release.with_platform("app [main!] { pf: platform \"../../platform/main.roc\" }\n", "https://x/y.tar.zst") == Ok("app [main!] { pf: platform \"https://x/y.tar.zst\" }\n")
-expect Release.with_platform("app [main!] { pf: platform \"other\" }", "u").is_err()
-expect Release.examples_archive("p", "1.0.0") == "p-examples-1.0.0.zip"
-expect Release.object([("b", "1"), ("a", Release.array([Release.text("x\"y"), Release.boolean(Bool.True)]))]) == "{\n  \"b\": 1,\n  \"a\": [\n    \"x\\\"y\",\n    true\n  ]\n}"
-expect Release.object([("e", Release.array([])), ("o", Release.object([]))]) == "{\n  \"e\": [],\n  \"o\": {}\n}"
-expect Release.sbom({ name: "p", commit: "c", created: "t", archive_sha256: "a", inputs: { version: "1.1.0", url: "u", sha256: "s", files: [{ name: "f", sha256: "1" }] }, platform_files: [{ name: "g", sha256: "2" }], zig: "0.17.0", roc: "nightly" }).contains("\"fileName\": \"./g\"")
+expect Sbom.sbom({ name: "p", commit: "c", created: "t", archive_sha256: "a", inputs: { version: "1.1.0", url: "u", sha256: "s", files: [{ name: "f", sha256: "1" }] }, platform_files: [{ name: "g", sha256: "2" }], zig: "0.17.0", roc: "nightly" }).contains("SPDXRef-platform-file-0")
