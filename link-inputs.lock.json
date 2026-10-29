@@ -2,22 +2,22 @@
   "schema_version": 1,
   "kind": "roc-zig-link-inputs",
   "repository": "lukewilliamboswell/roc-platform-template-zig",
-  "release": "link-inputs-sha256-0851322389816b634a9c35b09d655685ba1b053f5b15e262c165d9b65899934a",
+  "release": "link-inputs-sha256-e8564cfd58cb05636f4e51a903955ef2181e61d71a420dbc20b02eb65ceb74e9",
   "manifest": {
     "asset": "build-input-release.json",
-    "sha256": "0851322389816b634a9c35b09d655685ba1b053f5b15e262c165d9b65899934a"
+    "sha256": "e8564cfd58cb05636f4e51a903955ef2181e61d71a420dbc20b02eb65ceb74e9"
   },
   "source": {
-    "input_fingerprint": "255025d5e7debfa8b3dcdb82e4aaf452e6de8293bdbbdd0bbd846781f309a8f3",
-    "ref": "refs/heads/upgrade-blueprint-0.10-tools-0.7",
+    "input_fingerprint": "c592882dcdc4a6148b2ff90f08bae575a611ea6a4fcb85cf9462f830110633b5",
+    "ref": "refs/heads/release/1.1.2",
     "repository": "lukewilliamboswell/roc-platform-template-zig",
-    "sha": "cf74874eb4cc2bf0797503848db7aebfd2b89e79",
+    "sha": "f9e09aaafe3a5b3b08335c1f8acb407b094fde2f",
     "workflow": "lukewilliamboswell/roc-platform-template-zig/.github/workflows/linker-inputs.yml"
   },
   "targets": {
     "all": {
       "asset": "link-inputs-all.tar",
-      "sha256": "c4fedd99309cae249f1a6abfb03256b91d985fc10a9277d94847a98e010ed55b",
+      "sha256": "1d6790cd8bc4ea1422bedcc31f7f067f4399c58861569df4a47ddf1ce839cf7d",
       "size": 8253440
     }
   }
