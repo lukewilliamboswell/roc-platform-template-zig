@@ -6,6 +6,18 @@ source and cross-compiles the host. All six native runners test the same bundle
 and archived examples through Blueprint, including Intel macOS and Windows.
 `CI required` and `Bundle required` remain the required checks.
 
+== Documentation
+
+Every paragraph should help someone use, maintain or assess the current project.
+Delete superseded instructions and duplicate explanations. Keep implementation
+history in Git, unresolved work in issues, and release-specific changes on the
+published release; do not include release notes in the manual. Preserve current
+compatibility guidance, security boundaries, API contracts and required notices.
+
+Use the https://lukewilliamboswell.github.io/roc-automation/documentation.html#write-project-documentation[shared documentation guide] for structure and publishing.
+
+== Validate a change
+
 [source,sh]
 ----
 blueprint run check

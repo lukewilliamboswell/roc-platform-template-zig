@@ -60,16 +60,5 @@ and runtime libraries, licenses and the runtime manifest. Unrelated local
 libraries cannot enter the bundle. Final platform publication signs the tested
 bundle and an SPDX SBOM that records the runtime release and its components.
 
-Legacy pre-adoption releases retain downloadable provenance and SBOM bundles:
-
-[source,sh]
-----
-gh attestation verify roc-runtime-1.0.0.tar.gz --repo lukewilliamboswell/roc-platform-template-zig --bundle provenance.sigstore.json
-gh attestation verify roc-runtime-1.0.0.tar.gz --repo lukewilliamboswell/roc-platform-template-zig --bundle sbom.sigstore.json --predicate-type https://spdx.dev/Document/v2.3
-----
-
-For platform releases, use the `.tar.zst` bundle and the corresponding
-`platform-provenance.sigstore.json` / `platform-sbom.sigstore.json` assets.
-
 Attestations prove the recorded build identity and artifact integrity. They do
 not constitute an OpenSSF certification or an asserted SLSA level.
