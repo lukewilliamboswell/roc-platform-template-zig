@@ -1,5 +1,8 @@
 = Publish a platform release
 
+Published changes and downloads are on
+https://github.com/lukewilliamboswell/roc-platform-template-zig/releases[GitHub Releases].
+
 
 Dispatch **Release** on `main` with a new `MAJOR.MINOR.PATCH`. The workflow
 builds the bundle, the examples archive and the SBOM, tests the archive against
