@@ -63,7 +63,7 @@ config = [
 					"roc-docs",
 					|system| match system {
 						"x86_64-darwin" | "x86_64-windows" => Unavailable
-						_ => Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.7.0/roc-docs-{system}")(system)
+						_ => Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/roc-docs-{system}")(system)
 					},
 				),
 			]),
@@ -95,4 +95,4 @@ config = [
 	Task("link-input-tests", [Use("scripts"), Run(["roc-stable", "test", "scripts/src/LinkInputs.roc"])]),
 ]
 
-release_package = Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.7.0/release-package-{system}")
+release_package = Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/release-package-{system}")
