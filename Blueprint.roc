@@ -14,7 +14,7 @@
 # nightly named below; it runs the scripts under scripts/. Bare `roc` is the
 # latest nightly, which the machine provides: the platform and its examples
 # name no compiler.
-app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/EuSPs8vc71qJNFg29YzegvVRL1bR9pKqUYDHFiSCPTQ1.tar.zst" }
+app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.13.0/DBtzmMfrSgt6nCGVAcZYCVPxWbhpqw3MXpm6sdQzMn4v.tar.zst" }
 
 import pf.Recipes
 
@@ -63,7 +63,7 @@ config = [
 					"roc-docs",
 					|system| match system {
 						"x86_64-darwin" | "x86_64-windows" => Unavailable
-						_ => Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/roc-docs-{system}")(system)
+						_ => Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.11.1/roc-docs-{system}")(system)
 					},
 				),
 			]),
@@ -95,4 +95,4 @@ config = [
 	Task("link-input-tests", [Use("scripts"), Run(["roc-stable", "test", "scripts/src/LinkInputs.roc"])]),
 ]
 
-release_package = Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.9.0/release-package-{system}")
+release_package = Recipes.file("https://github.com/lukewilliamboswell/roc-automation/releases/download/tools-0.11.1/release-package-{system}")

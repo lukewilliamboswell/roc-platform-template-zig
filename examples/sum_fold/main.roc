@@ -7,13 +7,13 @@ import pf.Stdout
 
 main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str)])
 main! = |_args| {
-    # Build a string using fold - concatenate list items
-    joined = ["Hello", " ", "World", "!"].fold("", |acc, s| Str.concat(acc, s))
-    Stdout.line!("Joined: ${joined}")?
+	# Build a string using fold - concatenate list items
+	joined = ["Hello", " ", "World", "!"].fold("", |acc, s| Str.concat(acc, s))
+	Stdout.line!("Joined: ${joined}")?
 
-    # Use Str.join_with for joining with separator
-    csv = Str.join_with(["apple", "banana", "cherry"], ", ")
-    Stdout.line!("Fruits: ${csv}")?
+	# Use Str.join_with for joining with separator
+	csv = Str.join_with(["apple", "banana", "cherry"], ", ")
+	Stdout.line!("Fruits: ${csv}")?
 
-    Ok({})
+	Ok({})
 }

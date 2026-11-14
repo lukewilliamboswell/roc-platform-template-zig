@@ -7,10 +7,10 @@ import pf.Stdout
 
 main! : List(Str) => Try({}, [Exit(I32), StdinErr(Str), StdoutErr(Str)])
 main! = |_args| {
-    Stdout.line!("Enter something and I'll echo it back:")?
+	Stdout.line!("Enter something and I'll echo it back:")?
 
-    input = Stdin.line!({})?
-    Stdout.line!("You entered: ${input}")?
+	input = Stdin.line!({})?
+	Stdout.line!("You entered: ${input}")?
 
-    Ok({})
+	Ok({})
 }

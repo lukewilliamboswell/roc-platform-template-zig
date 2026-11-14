@@ -33,7 +33,9 @@ anything is released.
 
 `runtime/sources.json` pins the official Zig distribution, its SHA-256 and upstream
 Minisign key. The producer verifies both before executing Zig and compiling its
-bundled musl, Zig libc and compiler runtime. This does not bootstrap Zig itself.
+bundled musl, Zig libc and compiler runtime. The Linux libraries use PIC and musl’s self-relocating `rcrt1.o` startup for
+static PIE executables. The producer links and runs the native runtime smoke
+test as an ELF PIE before packaging. This does not bootstrap Zig itself.
 
 The archive strips build-path-bearing debug data with LLVM objcopy and contains baseline x86-64 and ARM64 Linux runtime files, a per-file
 manifest, and license notices. Zig 0.17.0 supplies musl 1.2.5 with Zig-specific

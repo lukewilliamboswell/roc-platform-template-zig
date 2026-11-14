@@ -21,7 +21,7 @@ permissions:
   contents: read
 
 env:
-  RP_AUTOMATION: lukewilliamboswell/roc-automation@ae089dae16f63f11a754e49c48a9310445e084dd
+  RP_AUTOMATION: lukewilliamboswell/roc-automation@86da266d92548efca10d67361fe1a2ec3436b72a
   VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || '0.0.1-dryrun' }}
 
 jobs:
@@ -55,11 +55,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+      - uses: roc-lang/setup-roc@dd81390553b0a1236aedb61cdd4c0ed7cf7eaec4
         with:
           version: nightly-new-compiler
           nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@86da266d92548efca10d67361fe1a2ec3436b72a
         with:
           cache: "true"
           cache-workload: dev
@@ -115,11 +115,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: roc-lang/setup-roc@cbe782d6f165b89c87d99f50a59ac4f5f73b4427
+      - uses: roc-lang/setup-roc@dd81390553b0a1236aedb61cdd4c0ed7cf7eaec4
         with:
           version: nightly-new-compiler
           nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
-      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81
+      - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@86da266d92548efca10d67361fe1a2ec3436b72a
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release
@@ -194,7 +194,7 @@ jobs:
             gh attestation verify "$bundle" --repo "$GITHUB_REPOSITORY" --bundle "platform-$kind.sigstore.json" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" --source-digest "$GITHUB_SHA" --source-ref refs/heads/main $extra
           done
-      - uses: lukewilliamboswell/roc-automation/actions/publish-release@8454f8ed9acc026c85e31e87b132dfeeaf9f1b81
+      - uses: lukewilliamboswell/roc-automation/actions/publish-release@86da266d92548efca10d67361fe1a2ec3436b72a
         with:
           version: ${{ env.VERSION }}
           prerelease: "false"

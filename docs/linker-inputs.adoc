@@ -36,7 +36,7 @@ Use new output directories. Runtime reproduction requires Linux, curl, Minisign,
 [source,sh]
 ----
 scripts/build_link_inputs.roc -- runtime --output .zig-cache/runtime-dist
-scripts/build_link_inputs.roc -- runtime-smoke .zig-cache/runtime-dist/roc-runtime-1.0.0.tar.gz
+scripts/build_link_inputs.roc -- runtime-smoke .zig-cache/runtime-dist/roc-runtime-1.1.0.tar.gz
 ----
 
 The producer fingerprint includes Blueprint.roc and Blueprint.lock. Tooling upgrades

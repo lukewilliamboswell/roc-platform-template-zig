@@ -7,7 +7,11 @@ LinkInputs := [].{
 
 	## The Linux runtime files, in link order: the startup object first.
 	runtime_files : List(Str)
-	runtime_files = ["crt1.o", "libc.a", "libzigc.a", "libcompiler_rt.a"]
+	runtime_files = ["rcrt1.o", "libc.a", "libzigc.a", "libcompiler_rt.a"]
+
+	## Zig cc emits ordinary startup; the producer replaces it with musl rcrt1.
+	runtime_trace_files : List(Str)
+	runtime_trace_files = ["crt1.o", "libc.a", "libzigc.a", "libcompiler_rt.a"]
 
 	runtime_targets : List(Str)
 	runtime_targets = ["x64musl", "arm64musl"]
@@ -78,6 +82,11 @@ LinkInputs := [].{
 		"linker-inputs/msvc-runtime/tls.zig",
 		"linker-inputs/msvc-runtime/LICENSE.roc.txt",
 		"runtime/sources.json",
+		"runtime/smoke.c",
+		"platform/main.roc",
+		"src/host.zig",
+		"src/roc_platform_abi.zig",
+		"tools/link_inputs.zig",
 		"scripts/build_link_inputs.roc",
 		"scripts/src/LinkInputs.roc",
 		"scripts/src/JsonValue.roc",
@@ -131,7 +140,7 @@ LinkInputs := [].{
 		for token in shell_split(line)?.drop_first(1) {
 			path = LinkInputs.absolute(parent, token)
 			name = basename(path)
-			if runtime_files.contains(name) {
+			if runtime_trace_files.contains(name) {
 				if $found.any(|input| input.name == name) or !path.starts_with("${root}/") {
 					return Err("Unexpected runtime linker input: ${token}")
 				}
@@ -140,7 +149,7 @@ LinkInputs := [].{
 				return Err("Unexpected linker library: ${token}")
 			}
 		}
-		if JsonValue.sort($found.map(|input| input.name)) != JsonValue.sort(runtime_files) {
+		if JsonValue.sort($found.map(|input| input.name)) != JsonValue.sort(runtime_trace_files) {
 			return Err("Incomplete Zig runtime inputs: ${Str.join_with($found.map(|input| input.name), ", ")}")
 		}
 		Ok($found)

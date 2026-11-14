@@ -1,0 +1,11 @@
+= roc-platform-template-zig 1.1.3
+
+This release supports Roc `nightly-2026-11-13-03dce41`, including the compiler’s
+static PIE linking on Linux. Linux linker inputs use position-independent
+libraries and musl’s self-relocating startup, fixing relocation failures when
+building applications with the latest nightly.
+
+Use the platform bundle at `{platform-url}`. The examples archive contains
+applications that use that URL and their expected output.
+
+Maintainer tooling uses Blueprint 0.13.0 and roc-automation tools 0.11.1.
