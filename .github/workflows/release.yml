@@ -57,7 +57,7 @@ jobs:
           persist-credentials: false
       - uses: roc-lang/setup-roc@dd81390553b0a1236aedb61cdd4c0ed7cf7eaec4
         with:
-          version: nightly-new-compiler
+          version: nightly
           nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
       - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@86da266d92548efca10d67361fe1a2ec3436b72a
         with:
@@ -117,7 +117,7 @@ jobs:
           persist-credentials: false
       - uses: roc-lang/setup-roc@dd81390553b0a1236aedb61cdd4c0ed7cf7eaec4
         with:
-          version: nightly-new-compiler
+          version: nightly
           nightly-tag: ${{ needs.resolve.outputs.nightly-tag }}
       - uses: lukewilliamboswell/roc-automation/actions/setup-blueprint@86da266d92548efca10d67361fe1a2ec3436b72a
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
