@@ -107,7 +107,7 @@ build_runtime! = |root, lock, zig, work, output| {
 		target_out = "${stage}/targets/${name}"
 		create_all!(target_out)?
 		# stdin has stable contents and no absolute source path. -g0 avoids debug paths.
-		flags = ["cc", "-target", target, "-mcpu=${cpu}", "-static", optimization, "-g0"]
+		flags = ["cc", "-target", target, "-mcpu=${cpu}", "-static", "-fPIC", optimization, "-g0"]
 		# Zig numbers a local `__anon_N` symbol by the compiler thread that made
 		# it, so the libraries it compiles differ between runs unless it has one
 		# thread. `zig cc` takes no job limit; one CPU gives it one thread.
@@ -117,7 +117,9 @@ build_runtime! = |root, lock, zig, work, output| {
 			"zig cc for ${name}",
 		)?
 		$commands = $commands.append({ target: name, argv: ["zig"].concat(flags).concat(["-x", "c", "-", "-o", "probe", "-v"]) })
-		for input in LinkInputs.runtime_link_inputs(Str.from_utf8_lossy(ran.stderr), cache)? {
+		# Zig cc supplies ordinary startup; static PIE needs self-relocation.
+		inputs = LinkInputs.runtime_link_inputs(Str.from_utf8_lossy(ran.stderr), cache)?
+		for input in inputs.keep_if(|input| input.name != "crt1.o") {
 			if !is_file!(input.path) {
 				return Err("Unexpected runtime linker input: ${input.path}")
 			}
@@ -130,6 +132,13 @@ build_runtime! = |root, lock, zig, work, output| {
 				_ = exec!(tool(objcopy, ["--strip-debug", input.path, destination], work), "${objcopy} ${input.name}")?
 			}
 		}
+
+		musl = "${directory_of(zig)}/lib/libc/musl"
+		arch = if name == "x64musl" "x86_64" else "aarch64"
+		startup = ["cc", "-target", target, "-mcpu=${cpu}", optimization, "-g0", "-fPIC", "-fno-stack-protector", "-std=c99", "-D_GNU_SOURCE", "-ffreestanding", "-fno-builtin", "-fvisibility=hidden"]
+		includes = ["arch/${arch}", "arch/generic", "src/internal", "src/include"].join_map(|path| ["-I", "${musl}/${path}"])
+		_ = exec!(tool(zig, startup.concat(includes).concat(["-c", "${musl}/crt/rcrt1.c", "-o", "${target_out}/rcrt1.o"]), work).envs_str(environment), "musl static PIE startup for ${name}")?
+		$commands = $commands.append({ target: "${name}/rcrt1.o", argv: ["zig"].concat(startup).concat(["-I", "musl/arch/${arch}", "-I", "musl/arch/generic", "-I", "musl/src/internal", "-I", "musl/src/include", "-c", "musl/crt/rcrt1.c", "-o", "rcrt1.o"]) })
 	}
 	zig_home = directory_of(zig)
 	copy!("${zig_home}/LICENSE", "${stage}/licenses/Zig.txt")?
@@ -145,6 +154,7 @@ build_runtime! = |root, lock, zig, work, output| {
 	manifest = JsonValue.render(LinkInputs.runtime_manifest({ version, commit, lock, commands: $commands, builder, files: $files }))
 	write_text!("${stage}/manifest.json", manifest)?
 	validate_runtime!(stage)?
+	smoke_tree!(root, lock, zig, stage, work)?
 	archive_name = "roc-runtime-${version}.tar.gz"
 	archive = "${output}/${archive_name}"
 	write_archive!(stage, LinkInputs.runtime_members, archive, Gzip)?
@@ -205,21 +215,32 @@ smoke! = |root, archive| {
 			stage = "${work}/runtime"
 			extract_runtime!(archive, stage, LinkInputs.runtime_members)?
 			validate_runtime!(stage)?
-			name = match machine!()? {
-				"x86_64" => "x64musl"
-				_ => "arm64musl"
-			}
-			target = JsonValue.get_text(JsonValue.get(lock, "targets")?, name)?
-			object = "${work}/smoke.o"
-			binary = "${work}/smoke"
-			libs = "${stage}/targets/${name}"
-			_ = exec!(loud(tool(zig, ["cc", "-target", target, "-mcpu=baseline", "-O2", "-UNDEBUG", "-c", "${root}/runtime/smoke.c", "-o", object], work)), "zig cc runtime/smoke.c")?
-			# Direct LLD invocation ensures there is no implicit host/toolchain libc.
-			_ = exec!(loud(tool(zig, ["ld.lld", "-static", "-o", binary, "${libs}/crt1.o", object, "--start-group"].concat(LinkInputs.runtime_files.drop_first(1).map(|file| "${libs}/${file}")).append("--end-group"), work)), "zig ld.lld")?
-			_ = exec!(loud(tool(binary, [], work)), "the runtime smoke test")?
+			smoke_tree!(root, lock, zig, stage, work)?
 			say!("Runtime smoke test passed: ${archive}")
 		},
 	)
+}
+
+## Exercise the native runtime with the same static PIE link contract as Roc.
+smoke_tree! : Str, JsonValue, Str, Str, Str => Try({}, Str)
+smoke_tree! = |root, lock, zig, stage, work| {
+	name = match machine!()? {
+		"x86_64" => "x64musl"
+		_ => "arm64musl"
+	}
+	target = JsonValue.get_text(JsonValue.get(lock, "targets")?, name)?
+	object = "${work}/smoke.o"
+	binary = "${work}/smoke"
+	libs = "${stage}/targets/${name}"
+	_ = exec!(loud(tool(zig, ["cc", "-target", target, "-mcpu=baseline", "-O2", "-UNDEBUG", "-fPIC", "-c", "${root}/runtime/smoke.c", "-o", object], work)), "zig cc runtime/smoke.c")?
+	# Direct LLD invocation ensures there is no implicit host/toolchain libc.
+	_ = exec!(loud(tool(zig, ["ld.lld", "-static", "-pie", "-z", "text", "--no-dynamic-linker", "-o", binary, "${libs}/rcrt1.o", object, "--start-group"].concat(LinkInputs.runtime_files.drop_first(1).map(|file| "${libs}/${file}")).append("--end-group"), work)), "zig ld.lld")?
+	elf = read_bytes!(binary)?
+	if elf.take_first(4) != [0x7f, 'E', 'L', 'F'] or elf.get(16) != Ok(3) or elf.get(17) != Ok(0) {
+		return Err("runtime smoke executable must be ELF ET_DYN (PIE)")
+	}
+	_ = exec!(loud(tool(binary, [], work)), "the runtime smoke test")?
+	Ok({})
 }
 
 ## Extract exactly `members` of a runtime archive after checking its listing.

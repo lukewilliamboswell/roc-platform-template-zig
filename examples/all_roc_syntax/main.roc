@@ -75,7 +75,7 @@ match_list_patterns = |lst| {
 
 match_tag_union_advanced : Try({}, [StdoutErr(Str), Other]) -> Str
 match_tag_union_advanced = |try|
-# `Try(a, b)` is the tag union `[Ok(a), Err(b)]` under the hood.
+	# `Try(a, b)` is the tag union `[Ok(a), Err(b)]` under the hood.
 	match try {
 		Ok(_) =>
 			"Success"
@@ -85,7 +85,7 @@ match_tag_union_advanced = |try|
 
 		Err(_) =>
 			"Unknown error"
-		}
+	}
 
 multiline_str : U64 -> Str
 multiline_str = |number|
@@ -125,16 +125,16 @@ for_loop = |num_list| {
 
 # break exits a for or while loop early
 break_in_for_loop = |bool_list| {
-    var $allTrue = True
-    for b in bool_list {
-        if b == False {
-            $allTrue = False
-            break
-        } else {
-            {}
-        }
-    }
-    $allTrue
+	var $allTrue = True
+	for b in bool_list {
+		if b == False {
+			$allTrue = False
+			break
+		} else {
+			{}
+		}
+	}
+	$allTrue
 }
 
 while_loop = |limit| {
@@ -170,32 +170,32 @@ dbg_keyword = || {
 if_demo : U64 -> Str
 if_demo = |num| {
 	# every if must have an else branch!
-	one_line_if = if num == 1 "One" else "NotOne"
+	one_line_if = if (num == 1) "One" else "NotOne"
 
-	two_line_if = 
-		if num == 2
+	two_line_if =
+		if (num == 2)
 			"Two"
 		else
 			"NotTwo"
 
-	with_curlies = 
-	    if num == 5 {
-	        "Five"
-	    } else {
-	        "NotFive"
-	    }
+	with_curlies =
+		if num == 5 {
+			"Five"
+		} else {
+			"NotFive"
+		}
 
 	# else if
-	if num == 3
+	if (num == 3)
 		"Three"
-	else if num == 4
+	else if (num == 4)
 		"Four"
 	else
 		one_line_if.concat(two_line_if).concat(with_curlies)
 }
 
-tuple_demo = 
-# tuples can contain multiple types
+tuple_demo =
+	# tuples can contain multiple types
 	("Roc", 1)
 
 # Here we use a type variable `a` to indicate this function works for a list of any type.
@@ -204,13 +204,13 @@ type_var = |lst| lst
 
 destructuring : () -> (Str, I64, I64, Str)
 destructuring = || {
-    tup = ("Roc", 1)
-    (str, num) = tup
+	tup = ("Roc", 1)
+	(str, num) = tup
 
-    rec = { x: 1, y: str } # TODO implement tuple access with `.index` ?
-    { x, y } = rec
+	rec = { x: 1, y: str } # TODO implement tuple access with `.index` ?
+	{ x, y } = rec
 
-    (str, num, x, y)
+	(str, num, x, y)
 }
 
 # TODO not sure if still planned for implementation
@@ -244,10 +244,8 @@ number_literals = {
 }
 
 # Opaque type
-# Useful if you want to hide fields e.g. so users of the type can not access some implementation detail you did not want to expose. 
-Secret :: {
-	key : Str
-}.{
+# Useful if you want to hide fields e.g. so users of the type can not access some implementation detail you did not want to expose.
+Secret :: { key : Str }.{
 	new : Str -> Secret
 	new = |k| { key: k }
 
@@ -271,7 +269,7 @@ Animal := [Dog(Str), Cat(Str)].{
 }
 
 early_return = |arg| {
-	first = 
+	first =
 		if !arg {
 			return 99
 		} else {
@@ -331,7 +329,7 @@ main! = |_args| {
 	print!("One".concat(" Two"))?
 
 	# If you want a very similar style for a function that is not defined on the type but is in scope, you can use `->`:
-	print!("Three"->my_concat(" Four"))?
+	print!("Three" |> my_concat(" Four"))?
 
 	Stdout.line!(simple_match(Red))?
 	print!(match_list_patterns([1, 10]))?
@@ -342,7 +340,7 @@ main! = |_args| {
 
 	effect_demo!("This is an effectful function!")?
 
-	#Stdout.line!(Str.inspect(question_postfix(["1", "not a number", "100"])))
+	# Stdout.line!(Str.inspect(question_postfix(["1", "not a number", "100"])))
 
 	sum = for_loop([1, 2, 3, 4, 5])
 	print!(sum)?
@@ -352,7 +350,7 @@ main! = |_args| {
 	all_true = break_in_for_loop([True, True, False, True, True])
 	print!(all_true)?
 
-    while_sum = while_loop(5)
+	while_sum = while_loop(5)
 	print!(while_sum)?
 
 	print!(dbg_keyword())?

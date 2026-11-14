@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "runtime_version": "1.0.0",
+  "runtime_version": "1.1.0",
   "zig_version": "0.17.0",
   "musl_version": "1.2.5",
   "zig_minisign_key": "RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U",

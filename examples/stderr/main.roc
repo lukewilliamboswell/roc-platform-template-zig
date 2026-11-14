@@ -7,14 +7,14 @@ import pf.Stderr
 
 main! : List(Str) => Try({}, [Exit(I32), StderrErr(Str), StdoutErr(Str)])
 main! = |_args| {
-    # Write to stdout
-    Stdout.line!("This message goes to stdout")?
-    Stdout.line!("You can redirect it with: roc run example.roc > out.txt")?
+	# Write to stdout
+	Stdout.line!("This message goes to stdout")?
+	Stdout.line!("You can redirect it with: roc run example.roc > out.txt")?
 
-    # Write to stderr
-    Stderr.line!("This message goes to stderr")?
-    Stderr.line!("You can redirect it with: roc run example.roc 2> err.txt")?
+	# Write to stderr
+	Stderr.line!("This message goes to stderr")?
+	Stderr.line!("You can redirect it with: roc run example.roc 2> err.txt")?
 
-    # Return success
-    Ok({})
+	# Return success
+	Ok({})
 }
