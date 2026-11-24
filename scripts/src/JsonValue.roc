@@ -23,7 +23,7 @@ JsonValue := [Null, Boolean(Bool), Number(Str), Text(Str), Array(List(JsonValue)
 	compact = |json|
 		match json {
 			Array(items) => "[${Str.join_with(items.map(JsonValue.compact), ",")}]"
-			Object(fields) => "{${Str.join_with(sorted(fields).map(|field| "${quote(field.key)}:${JsonValue.compact(field.value)}"), ",")}}"
+			Object(members) => "{${Str.join_with(sorted(members).map(|field| "${quote(field.key)}:${JsonValue.compact(field.value)}"), ",")}}"
 			_ => scalar(json)
 		}
 
@@ -32,7 +32,7 @@ JsonValue := [Null, Boolean(Bool), Number(Str), Text(Str), Array(List(JsonValue)
 	spaced = |json|
 		match json {
 			Array(items) => "[${Str.join_with(items.map(JsonValue.spaced), ", ")}]"
-			Object(fields) => "{${Str.join_with(sorted(fields).map(|field| "${quote(field.key)}: ${JsonValue.spaced(field.value)}"), ", ")}}"
+			Object(members) => "{${Str.join_with(sorted(members).map(|field| "${quote(field.key)}: ${JsonValue.spaced(field.value)}"), ", ")}}"
 			_ => scalar(json)
 		}
 
@@ -56,8 +56,8 @@ JsonValue := [Null, Boolean(Bool), Number(Str), Text(Str), Array(List(JsonValue)
 	get : JsonValue, Str -> Try(JsonValue, Str)
 	get = |json, name|
 		match json {
-			Object(fields) =>
-				match fields.find_first(|field| field.key == name) {
+			Object(members) =>
+				match members.find_first(|field| field.key == name) {
 					Ok(field) => Ok(field.value)
 					Err(NotFound) => Err("missing JSON field ${name}")
 				}

@@ -1,7 +1,7 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-23-b5c77fc",
 }
 
 import cli.Cmd
@@ -111,7 +111,7 @@ section! = |name| Stdout.line!("\n== ${name}").map_err(|_| "cannot write to stdo
 
 capture! : Str, List(Str) => Try(Str, Str)
 capture! = |program, args| {
-	output = Cmd.new_str(program).args_str(args).run!().map_err(|_| "could not run ${program}")?
+	output = Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).run!().map_err(|_| "could not run ${program}")?
 	match output.status {
 		Exited(0) => Ok(Str.from_utf8_lossy(output.stdout_bytes))
 		_ => Err("${program} ${Str.join_with(args, " ")} failed: ${Str.from_utf8_lossy(output.stderr_bytes)}")
@@ -122,9 +122,10 @@ capture! = |program, args| {
 succeed! : Str, List(Str) => Try({}, Str)
 succeed! = |program, args| {
 	Stdout.line!("+ ${program} ${Str.join_with(args, " ")}").map_err(|_| "cannot write to stdout")?
-	match Cmd.new_str(program).args_str(args).exec_exit_code!() {
-		Ok(0) => Ok({})
-		Ok(code) => Err("${program} ${Str.join_with(args, " ")} exited with code ${code.to_str()}")
+	match Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).inherit_stdio().run!() {
+		Ok({ status: Exited(0), .. }) => Ok({})
+		Ok({ status: Exited(code), .. }) => Err("${program} ${Str.join_with(args, " ")} exited with code ${code.to_str()}")
+		Ok({ status: Signaled(signal), .. }) => Err("${program} was killed by signal ${signal.to_str()}")
 		Err(_) => Err("could not run ${program}")
 	}
 }
