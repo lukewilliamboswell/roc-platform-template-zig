@@ -80,7 +80,7 @@ config = [
 	# The host as a release ships it.
 	Task("build-release", [Use("dev"), Run(["zig", "build", "-Doptimize=ReleaseSafe"])]),
 	Task("test", [Use("dev"), Run(["zig", "build", "test"])]),
-	Task("bundle", [Use("dev"), Run(["roc-stable", "scripts/bundle.roc", "--"])]),
+	Task("bundle", [Use("dev"), Run(["roc-stable", "scripts/bundle.roc"])]),
 	Environment("release-test", [Programs([Fetch("release-package", release_package)]), Expect(["roc"])]),
 	Environment("release", [Extend("dev"), Programs([Fetch("release-package", release_package)])]),
 	Task("release-package", [Use("release"), Run(["release-package"])]),
@@ -88,7 +88,7 @@ config = [
 	Task("sbom", [Use("dev"), Run(["roc-stable", "scripts/sbom.roc"])]),
 	Task("test-expects", [Use("dev"), Run(["roc-stable", "scripts/test_expects.roc"])]),
 	Task("test-host", [Use("dev"), Run(["zig", "build", "test-host", "-Doptimize=ReleaseSafe"])]),
-	Task("link-inputs", [Use("scripts"), Run(["roc-stable", "scripts/build_link_inputs.roc", "--"])]),
+	Task("link-inputs", [Use("scripts"), Run(["roc-stable", "scripts/build_link_inputs.roc"])]),
 	# The tooling compiler, as release notes record it.
 	Task("compiler-version", [Use("scripts"), Run(["roc-stable", "version"])]),
 	Task("json-value-tests", [Use("scripts"), Run(["roc-stable", "test", "scripts/src/JsonValue.roc"])]),

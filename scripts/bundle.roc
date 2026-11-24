@@ -17,7 +17,7 @@ import src/Bundle
 ## never glob local binaries. Run from the repository root after `zig build`.
 ##
 ##   scripts/bundle.roc                          the bundle, in the repository root
-##   scripts/bundle.roc -- --output-dir DIR      the bundle, in DIR
+##   scripts/bundle.roc --output-dir DIR      the bundle, in DIR
 ##
 ## The bundle holds the platform's Roc modules, each target's host library,
 ## the locked linker inputs for each target, their licenses and sources, and
