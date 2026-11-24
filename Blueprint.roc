@@ -39,16 +39,17 @@ config = [
 		[
 			Extend("scripts"),
 			# The exact Zig release that builds the host; build.zig.zon and
-			# runtime/sources.json name the same version.
+			# runtime/sources.json name the same version. The Zig-listed mirror
+			# serves the same checksum-locked archives as ziglang.org.
 			Programs([
 				Fetch(
 					"zig",
 					|system| match system {
-						"x86_64-linux" => Archive("https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz", TarXz, "zig-x86_64-linux-0.17.0/zig")
-						"aarch64-linux" => Archive("https://ziglang.org/download/0.17.0/zig-aarch64-linux-0.17.0.tar.xz", TarXz, "zig-aarch64-linux-0.17.0/zig")
-						"aarch64-darwin" => Archive("https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz", TarXz, "zig-aarch64-macos-0.17.0/zig")
-						"x86_64-darwin" => Archive("https://ziglang.org/download/0.17.0/zig-x86_64-macos-0.17.0.tar.xz", TarXz, "zig-x86_64-macos-0.17.0/zig")
-						"x86_64-windows" => Archive("https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip", Zip, "zig-x86_64-windows-0.17.0/zig.exe")
+						"x86_64-linux" => Mirrored(Archive("https://pkg.hexops.org/zig/zig-x86_64-linux-0.17.0.tar.xz", TarXz, "zig-x86_64-linux-0.17.0/zig"), ["https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"])
+						"aarch64-linux" => Mirrored(Archive("https://pkg.hexops.org/zig/zig-aarch64-linux-0.17.0.tar.xz", TarXz, "zig-aarch64-linux-0.17.0/zig"), ["https://ziglang.org/download/0.17.0/zig-aarch64-linux-0.17.0.tar.xz"])
+						"aarch64-darwin" => Mirrored(Archive("https://pkg.hexops.org/zig/zig-aarch64-macos-0.17.0.tar.xz", TarXz, "zig-aarch64-macos-0.17.0/zig"), ["https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz"])
+						"x86_64-darwin" => Mirrored(Archive("https://pkg.hexops.org/zig/zig-x86_64-macos-0.17.0.tar.xz", TarXz, "zig-x86_64-macos-0.17.0/zig"), ["https://ziglang.org/download/0.17.0/zig-x86_64-macos-0.17.0.tar.xz"])
+						"x86_64-windows" => Mirrored(Archive("https://pkg.hexops.org/zig/zig-x86_64-windows-0.17.0.zip", Zip, "zig-x86_64-windows-0.17.0/zig.exe"), ["https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip"])
 						_ => Unavailable
 					},
 				),
