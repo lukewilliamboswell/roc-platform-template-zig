@@ -55,9 +55,11 @@ pub const RocBox = ?*anyopaque;
 /// linker symbols declared below (`roc_alloc`, hosted symbols, and provided entrypoints).
 pub const RocHost = extern struct {
     env: *anyopaque,
-    roc_alloc: *const fn (*RocHost, usize, usize) callconv(.c) ?*anyopaque,
+    /// Never returns null; see `roc_alloc` below.
+    roc_alloc: *const fn (*RocHost, usize, usize) callconv(.c) *anyopaque,
     roc_dealloc: *const fn (*RocHost, *anyopaque, usize) callconv(.c) void,
-    roc_realloc: *const fn (*RocHost, *anyopaque, usize, usize) callconv(.c) ?*anyopaque,
+    /// Never returns null; see `roc_realloc` below.
+    roc_realloc: *const fn (*RocHost, *anyopaque, usize, usize) callconv(.c) *anyopaque,
     roc_dbg: *const fn (*RocHost, [*]const u8, usize) callconv(.c) void,
     roc_expect_failed: *const fn (*RocHost, [*]const u8, usize) callconv(.c) void,
     roc_crashed: *const fn (*RocHost, [*]const u8, usize) callconv(.c) void,
@@ -79,6 +81,8 @@ pub const RocErasedCallableOnDrop = *const fn (?[*]u8, *RocHost) callconv(.c) vo
 pub const RocErasedCallablePayload = extern struct {
     callable_fn_ptr: RocErasedCallableFn,
     on_drop: ?RocErasedCallableOnDrop,
+    on_copy: ?*const fn (?[*]u8, isize) callconv(.c) void = null,
+    capture_size: usize = 0,
 };
 
 /// Runtime representation of `Box(function)`.
@@ -116,7 +120,7 @@ pub fn rocErasedCallableAllocate(
     const rc: *isize = @ptrFromInt(@intFromPtr(data) - @sizeOf(isize));
     rc.* = 1;
     const payload: *RocErasedCallablePayload = @ptrCast(@alignCast(data));
-    payload.* = .{ .callable_fn_ptr = callable_fn_ptr, .on_drop = on_drop };
+    payload.* = .{ .callable_fn_ptr = callable_fn_ptr, .on_drop = on_drop, .capture_size = capture_size };
     return data;
 }
 
@@ -560,6 +564,86 @@ pub fn RocListWith(comptime T: type, comptime elements_refcounted: bool) type {
     };
 }
 
+/// A Roc list whose items have a type only the application knows.
+///
+/// This host knows neither the size of an item nor whether items are
+/// refcounted, so it cannot read an item, allocate such a list, or release
+/// one. It can move the list, retain it, and pass it back to Roc. To release
+/// it, pass it to a Roc function that takes ownership of it.
+pub const RocOpaqueList = extern struct {
+    elements_ptr: ?*anyopaque,
+    length: usize,
+    capacity_or_alloc_ptr: usize,
+
+    /// Return the number of items in the list.
+    pub fn len(self: RocOpaqueList) usize {
+        return self.length;
+    }
+
+    /// Return true if the list has zero items.
+    pub fn isEmpty(self: RocOpaqueList) bool {
+        return self.length == 0;
+    }
+
+    /// Increment the reference count by `amount`.
+    pub fn incref(self: RocOpaqueList, amount: isize) void {
+        retainListAllocation(self.elements_ptr, self.capacity_or_alloc_ptr, amount);
+    }
+};
+
+/// A Roc list whose items hold opaque Roc values.
+///
+/// The items have a known layout, so the host can read them. Whether the
+/// opaque values inside them are refcounted is known only to Roc, and the
+/// list's allocation header depends on it, so the host cannot allocate such
+/// a list or release one. It can move the list, retain it, and pass it back
+/// to Roc. To release it, pass it to a Roc function that takes ownership of
+/// it.
+pub fn RocHeldList(comptime T: type) type {
+    return extern struct {
+        elements_ptr: ?[*]T,
+        length: usize,
+        capacity_or_alloc_ptr: usize,
+
+        const Self = @This();
+
+        /// Return the list items as a `[]const T` slice.
+        pub fn items(self: Self) []const T {
+            if (self.elements_ptr) |ptr| return ptr[0..self.length];
+            return &[_]T{};
+        }
+
+        /// Return the number of items in the list.
+        pub fn len(self: Self) usize {
+            return self.length;
+        }
+
+        /// Return true if the list has zero items.
+        pub fn isEmpty(self: Self) bool {
+            return self.length == 0;
+        }
+
+        /// Increment the reference count by `amount`.
+        pub fn incref(self: Self, amount: isize) void {
+            retainListAllocation(@ptrCast(self.elements_ptr), self.capacity_or_alloc_ptr, amount);
+        }
+    };
+}
+
+/// Add `amount` references to a list's allocation. The refcount slot sits
+/// directly before the allocation's first item whatever the item type is,
+/// and a seamless slice names its allocation in `capacity_or_alloc_ptr`.
+fn retainListAllocation(elements_ptr: ?*anyopaque, capacity_or_alloc_ptr: usize, amount: isize) void {
+    const alloc_addr = if ((capacity_or_alloc_ptr & 1) != 0)
+        capacity_or_alloc_ptr & ~@as(usize, 1)
+    else
+        @intFromPtr(elements_ptr);
+    if (alloc_addr == 0) return;
+    const rc: *isize = @ptrFromInt(alloc_addr - @sizeOf(isize));
+    if (rc.* == 0) return; // REFCOUNT_STATIC_DATA
+    _ = @atomicRmw(isize, rc, .Add, amount, .monotonic);
+}
+
 pub fn RocNoopRelease(comptime T: type) type {
     return struct {
         pub fn release(value: T, roc_host: *RocHost) void {
@@ -703,14 +787,14 @@ pub const RocEnv = struct {
 
 /// Tag discriminant for Try.
 pub const HostStderr_lineResultTag = enum(u8) {
-    Err = 0,
-    Ok = 1,
+    @"Err" = 0,
+    @"Ok" = 1,
 };
 
 /// Payload union for Try.
 pub const HostStderr_lineResultPayload = extern union {
-        err: RocStr,
-        ok: [0]u8,
+        @"err": RocStr,
+        @"ok": [0]u8,
 };
 
 /// Tag union: Try
@@ -734,7 +818,7 @@ pub const HostStderr_lineResult = if (@sizeOf(usize) == 4) extern struct {
     payload: HostStderr_lineResultPayload,
     tag: HostStderr_lineResultTag,
     pub fn payload_err(self: *const @This()) RocStr {
-        return self.payload.err;
+        return self.payload.@"err";
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -762,14 +846,14 @@ comptime {
 
 /// Tag discriminant for Try.
 pub const HostStdin_lineResultTag = enum(u8) {
-    Err = 0,
-    Ok = 1,
+    @"Err" = 0,
+    @"Ok" = 1,
 };
 
 /// Payload union for Try.
 pub const HostStdin_lineResultPayload = extern union {
-        err: RocStr,
-        ok: RocStr,
+        @"err": RocStr,
+        @"ok": RocStr,
 };
 
 /// Tag union: Try
@@ -797,10 +881,10 @@ pub const HostStdin_lineResult = if (@sizeOf(usize) == 4) extern struct {
     payload: HostStdin_lineResultPayload,
     tag: HostStdin_lineResultTag,
     pub fn payload_err(self: *const @This()) RocStr {
-        return self.payload.err;
+        return self.payload.@"err";
     }
     pub fn payload_ok(self: *const @This()) RocStr {
-        return self.payload.ok;
+        return self.payload.@"ok";
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -828,14 +912,14 @@ comptime {
 
 /// Tag discriminant for Try.
 pub const HostStdout_lineResultTag = enum(u8) {
-    Err = 0,
-    Ok = 1,
+    @"Err" = 0,
+    @"Ok" = 1,
 };
 
 /// Payload union for Try.
 pub const HostStdout_lineResultPayload = extern union {
-        err: RocStr,
-        ok: [0]u8,
+        @"err": RocStr,
+        @"ok": [0]u8,
 };
 
 /// Tag union: Try
@@ -859,7 +943,7 @@ pub const HostStdout_lineResult = if (@sizeOf(usize) == 4) extern struct {
     payload: HostStdout_lineResultPayload,
     tag: HostStdout_lineResultTag,
     pub fn payload_err(self: *const @This()) RocStr {
-        return self.payload.err;
+        return self.payload.@"err";
     }
     /// Recursively decrement Roc-owned payloads.
     pub fn decref(self: @This(), roc_host: *RocHost) void {
@@ -885,65 +969,6 @@ comptime {
     }
 }
 
-/// Tag discriminant for Try.
-pub const TryType16Tag = enum(u8) {
-    Err = 0,
-    Ok = 1,
-};
-
-/// Payload union for Try.
-pub const TryType16Payload = extern union {
-        err: i32,
-        ok: [0]u8,
-};
-
-/// Tag union: Try
-pub const TryType16 = if (@sizeOf(usize) == 4) extern struct {
-    payload: [4]u8 align(4),
-    tag: TryType16Tag,
-    pub fn payload_err(self: *const @This()) i32 {
-        const ptr: *const i32 = @ptrCast(@alignCast(&self.payload));
-        return ptr.*;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefTryType16(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfTryType16(self, amount);
-    }
-} else extern struct {
-    payload: TryType16Payload,
-    tag: TryType16Tag,
-    pub fn payload_err(self: *const @This()) i32 {
-        return self.payload.err;
-    }
-    /// Recursively decrement Roc-owned payloads.
-    pub fn decref(self: @This(), roc_host: *RocHost) void {
-        decrefTryType16(self, roc_host);
-    }
-
-    /// Increment Roc-owned payloads.
-    pub fn incref(self: @This(), amount: isize) void {
-        increfTryType16(self, amount);
-    }
-};
-
-comptime {
-    if (@sizeOf(usize) == 8) {
-        if (@sizeOf(TryType16) != 8) @compileError("TryType16 size mismatch");
-        if (@alignOf(TryType16) != 4) @compileError("TryType16 alignment mismatch");
-        if (@offsetOf(TryType16, "tag") != 4) @compileError("TryType16 tag offset mismatch");
-    }
-    if (@sizeOf(usize) == 4) {
-        if (@sizeOf(TryType16) != 8) @compileError("TryType16 size mismatch");
-        if (@alignOf(TryType16) != 4) @compileError("TryType16 alignment mismatch");
-        if (@offsetOf(TryType16, "tag") != 4) @compileError("TryType16 tag offset mismatch");
-    }
-}
-
 /// Arguments for Host.stderr_line!
 /// Roc signature: Str => Try({}, [StderrErr(Str)])
 /// Refcounted fields are owned by the hosted function.
@@ -962,19 +987,19 @@ pub const HostStdout_lineArgs = extern struct {
 
 fn decrefHostStderr_lineResult(value: HostStderr_lineResult, roc_host: *RocHost) void {
     switch (value.tag) {
-        .Err => {
+        .@"Err" => {
         value.payload_err().decref(roc_host);
         },
-        .Ok => {},
+        .@"Ok" => {},
     }
 }
 
 fn increfHostStderr_lineResult(value: HostStderr_lineResult, amount: isize) void {
     switch (value.tag) {
-        .Err => {
+        .@"Err" => {
         value.payload_err().incref(amount);
         },
-        .Ok => {},
+        .@"Ok" => {},
     }
 }
 
@@ -986,10 +1011,10 @@ pub const HostStderr_lineResultRelease = struct {
 
 fn decrefHostStdin_lineResult(value: HostStdin_lineResult, roc_host: *RocHost) void {
     switch (value.tag) {
-        .Err => {
+        .@"Err" => {
         value.payload_err().decref(roc_host);
         },
-        .Ok => {
+        .@"Ok" => {
         value.payload_ok().decref(roc_host);
         },
     }
@@ -997,10 +1022,10 @@ fn decrefHostStdin_lineResult(value: HostStdin_lineResult, roc_host: *RocHost) v
 
 fn increfHostStdin_lineResult(value: HostStdin_lineResult, amount: isize) void {
     switch (value.tag) {
-        .Err => {
+        .@"Err" => {
         value.payload_err().incref(amount);
         },
-        .Ok => {
+        .@"Ok" => {
         value.payload_ok().incref(amount);
         },
     }
@@ -1014,46 +1039,24 @@ pub const HostStdin_lineResultRelease = struct {
 
 fn decrefHostStdout_lineResult(value: HostStdout_lineResult, roc_host: *RocHost) void {
     switch (value.tag) {
-        .Err => {
+        .@"Err" => {
         value.payload_err().decref(roc_host);
         },
-        .Ok => {},
+        .@"Ok" => {},
     }
 }
 
 fn increfHostStdout_lineResult(value: HostStdout_lineResult, amount: isize) void {
     switch (value.tag) {
-        .Err => {
+        .@"Err" => {
         value.payload_err().incref(amount);
         },
-        .Ok => {},
+        .@"Ok" => {},
     }
 }
 
 pub const HostStdout_lineResultRelease = struct {
     pub fn release(value: HostStdout_lineResult, roc_host: *RocHost) void {
-        value.decref(roc_host);
-    }
-};
-
-fn decrefTryType16(value: TryType16, roc_host: *RocHost) void {
-    _ = roc_host;
-    switch (value.tag) {
-        .Err => {},
-        .Ok => {},
-    }
-}
-
-fn increfTryType16(value: TryType16, amount: isize) void {
-    _ = amount;
-    switch (value.tag) {
-        .Err => {},
-        .Ok => {},
-    }
-}
-
-pub const TryType16Release = struct {
-    pub fn release(value: TryType16, roc_host: *RocHost) void {
         value.decref(roc_host);
     }
 };
@@ -1081,11 +1084,17 @@ fn rocReleasePolicy(comptime T: type) type {
 //
 // The host defines these linker symbols. Compiled Roc code calls them directly.
 
-pub extern fn roc_alloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque;
+/// Returns `length` bytes aligned to `alignment`. Never returns null: Roc writes through
+/// the result without checking it, so a host that cannot allocate must stop the Roc
+/// program and not return, exactly as `roc_crashed` does.
+pub extern fn roc_alloc(length: usize, alignment: usize) callconv(.c) *anyopaque;
 pub extern fn roc_dealloc(ptr: *anyopaque, alignment: usize) callconv(.c) void;
-pub extern fn roc_realloc(ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) ?*anyopaque;
+/// Never returns null, under the same rule as `roc_alloc`.
+pub extern fn roc_realloc(ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) *anyopaque;
 pub extern fn roc_dbg(bytes: [*]const u8, len: usize) callconv(.c) void;
 pub extern fn roc_expect_failed(bytes: [*]const u8, len: usize) callconv(.c) void;
+/// Must never return: end the process, or longjmp out of the Roc code that called
+/// it. Roc code traps right after this call, so returning terminates the process.
 pub extern fn roc_crashed(bytes: [*]const u8, len: usize) callconv(.c) void;
 
 // Hosted Symbols
@@ -1122,7 +1131,7 @@ pub extern fn roc_stdout_line(arg0: RocStr) callconv(.c) HostStdout_lineResult;
 /// allocation size (required because `roc_dealloc` receives no length).
 pub const DefaultAllocators = struct {
     /// Allocate memory for the Roc runtime.
-    pub fn rocAlloc(roc_host: *RocHost, length: usize, alignment: usize) callconv(.c) ?*anyopaque {
+    pub fn rocAlloc(roc_host: *RocHost, length: usize, alignment: usize) callconv(.c) *anyopaque {
         const env: *RocEnv = @ptrCast(@alignCast(roc_host.env));
         const allocator = env.allocator;
 
@@ -1161,7 +1170,7 @@ pub const DefaultAllocators = struct {
     }
 
     /// Reallocate memory, copying existing data to the new allocation.
-    pub fn rocRealloc(roc_host: *RocHost, ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) ?*anyopaque {
+    pub fn rocRealloc(roc_host: *RocHost, ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) *anyopaque {
         const env: *RocEnv = @ptrCast(@alignCast(roc_host.env));
         const allocator = env.allocator;
 
