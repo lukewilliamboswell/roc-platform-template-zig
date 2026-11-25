@@ -1,7 +1,7 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-25-d5a4f1e",
 }
 
 import cli.Cmd
@@ -10,6 +10,7 @@ import cli.OsStr
 import cli.Path
 import cli.Stderr
 import cli.Stdout
+import cli.System
 import src/JsonValue
 import src/LinkInputs
 
@@ -93,7 +94,7 @@ build_runtime! : Str, JsonValue, Str, Str, Str => Try(Str, Str)
 build_runtime! = |root, lock, zig, work, output| {
 	objcopy = JsonValue.get_text(JsonValue.get(lock, "objcopy")?, "command")?
 	cache = "${work}/cache"
-	environment = [("ZIG_GLOBAL_CACHE_DIR", cache), ("ZIG_LOCAL_CACHE_DIR", "${work}/local")]
+	environment = [("ZIG_GLOBAL_CACHE_DIR", OsStr.from_str(cache)), ("ZIG_LOCAL_CACHE_DIR", "${work}/local")]
 	stage = "${work}/stage"
 	cpu = JsonValue.get_text(lock, "cpu")?
 	optimization = JsonValue.get_text(lock, "optimization")?
@@ -113,7 +114,7 @@ build_runtime! = |root, lock, zig, work, output| {
 		# thread. `zig cc` takes no job limit; one CPU gives it one thread.
 		say!("Building the ${name} runtime on one CPU")?
 		ran = exec!(
-			tool("taskset", ["-c", "0", zig].concat(flags).concat(["-x", "c", "-", "-o", "${work}/probe-${name}", "-v"]), work).envs_str(environment).stdin(Bytes(Str.to_utf8(probe_main))),
+			tool("taskset", ["-c", "0", zig].concat(flags).concat(["-x", "c", "-", "-o", "${work}/probe-${name}", "-v"]), work).envs(environment).stdin(Bytes(Str.to_utf8(probe_main))),
 			"zig cc for ${name}",
 		)?
 		$commands = $commands.append({ target: name, argv: ["zig"].concat(flags).concat(["-x", "c", "-", "-o", "probe", "-v"]) })
@@ -134,10 +135,10 @@ build_runtime! = |root, lock, zig, work, output| {
 		}
 
 		musl = "${directory_of(zig)}/lib/libc/musl"
-		arch = if name == "x64musl" "x86_64" else "aarch64"
+		arch = if (name == "x64musl") "x86_64" else "aarch64"
 		startup = ["cc", "-target", target, "-mcpu=${cpu}", optimization, "-g0", "-fPIC", "-fno-stack-protector", "-std=c99", "-D_GNU_SOURCE", "-ffreestanding", "-fno-builtin", "-fvisibility=hidden"]
 		includes = ["arch/${arch}", "arch/generic", "src/internal", "src/include"].join_map(|path| ["-I", "${musl}/${path}"])
-		_ = exec!(tool(zig, startup.concat(includes).concat(["-c", "${musl}/crt/rcrt1.c", "-o", "${target_out}/rcrt1.o"]), work).envs_str(environment), "musl static PIE startup for ${name}")?
+		_ = exec!(tool(zig, startup.concat(includes).concat(["-c", "${musl}/crt/rcrt1.c", "-o", "${target_out}/rcrt1.o"]), work).envs(environment), "musl static PIE startup for ${name}")?
 		$commands = $commands.append({ target: "${name}/rcrt1.o", argv: ["zig"].concat(startup).concat(["-I", "musl/arch/${arch}", "-I", "musl/arch/generic", "-I", "musl/src/internal", "-I", "musl/src/include", "-c", "musl/crt/rcrt1.c", "-o", "rcrt1.o"]) })
 	}
 	zig_home = directory_of(zig)
@@ -358,7 +359,7 @@ windows_files! = |root, zig, work| {
 	environment = [("ZIG_GLOBAL_CACHE_DIR", "${target_work}/cache"), ("ZIG_LOCAL_CACHE_DIR", "${target_work}/local")]
 	say!("Generating the Windows import libraries")?
 	ran = exec!(
-		tool(zig, ["cc", "-target", "x86_64-windows-gnu", "-O2", "-g0", "-fno-sanitize=all", "-x", "c", "-", "-o", "${target_work}/probe.exe", "-v"], work).envs_str(environment).stdin(Bytes(Str.to_utf8(probe_main))),
+		tool(zig, ["cc", "-target", "x86_64-windows-gnu", "-O2", "-g0", "-fno-sanitize=all", "-x", "c", "-", "-o", "${target_work}/probe.exe", "-v"], work).envs(environment).stdin(Bytes(Str.to_utf8(probe_main))),
 		"zig cc for x86_64-windows-gnu",
 	)?
 	found = LinkInputs.windows_link_inputs(Str.from_utf8_lossy(ran.stderr), LinkInputs.windows_imports, work)?
@@ -375,7 +376,7 @@ windows_files! = |root, zig, work| {
 
 ## Build the MSVC-ABI startup archive: the entry point lld-link infers for a
 ## console program, the TLS directory and compiler-rt, one archive member each.
-msvc_runtime! : Str, Str, Str, List((Str, Str)) => Try(List(U8), Str)
+msvc_runtime! : Str, Str, Str, List((OsStr, OsStr)) => Try(List(U8), Str)
 msvc_runtime! = |root, zig, work, environment| {
 	vendored = "${root}/linker-inputs/msvc-runtime"
 	recorded = JsonValue.fields(JsonValue.get(json!("${vendored}/UPSTREAM.json")?, "files")?)?
@@ -394,8 +395,8 @@ msvc_runtime! = |root, zig, work, environment| {
 	say!("Building the MSVC runtime")?
 	# -j1: Zig numbers a local `__anon_N` symbol by the compiler thread that made it.
 	common = ["-target", "x86_64-windows-msvc", "-O", "ReleaseFast", "-fstrip", "-fno-stack-check", "-j1"]
-	_ = exec!(loud(tool(zig, ["build-obj", "tls.zig"].concat(common).append("-femit-bin=tls.obj"), build).envs_str(environment)), "zig build-obj tls.zig")?
-	_ = exec!(loud(tool(zig, ["build-lib", "exe_startup.zig", "tls.obj"].concat(common).concat(["-fcompiler-rt", "-femit-bin=unnormalized.lib"]), build).envs_str(environment)), "zig build-lib exe_startup.zig")?
+	_ = exec!(loud(tool(zig, ["build-obj", "tls.zig"].concat(common).append("-femit-bin=tls.obj"), build).envs(environment)), "zig build-obj tls.zig")?
+	_ = exec!(loud(tool(zig, ["build-lib", "exe_startup.zig", "tls.obj"].concat(common).concat(["-fcompiler-rt", "-femit-bin=unnormalized.lib"]), build).envs(environment)), "zig build-lib exe_startup.zig")?
 	# Zig's archive names its members by cache path; rebuild it with stable names.
 	listed = exec!(tool(zig, ["ar", "t", "unnormalized.lib"], build), "zig ar t unnormalized.lib")?
 	members = lines(listed.stdout).map(|member| { name: LinkInputs.basename(member.replace_each("\\", "/")), member })
@@ -415,7 +416,7 @@ msvc_runtime! = |root, zig, work, environment| {
 
 ## Link the template host the way Roc does for x64win: only the listed inputs,
 ## nothing from the machine, and the entry point left for lld-link to infer.
-check_windows_link! : Str, Str, Str, List((Str, Str)), List({ name : Str, bytes : List(U8) }) => Try({}, Str)
+check_windows_link! : Str, Str, Str, List((OsStr, OsStr)), List({ name : Str, bytes : List(U8) }) => Try({}, Str)
 check_windows_link! = |root, zig, work, environment, files| {
 	link = "${work}/windows-link"
 	create_all!(link)?
@@ -423,9 +424,9 @@ check_windows_link! = |root, zig, work, environment, files| {
 		write_bytes!("${link}/${LinkInputs.basename(file.name)}", file.bytes)?
 	}
 	say!("Checking the Windows link")?
-	_ = exec!(loud(tool(zig, ["build-lib", "${root}/src/host.zig", "-target", "x86_64-windows-msvc", "-O", "ReleaseSafe", "-fcompiler-rt", "-femit-bin=host.lib"], link).envs_str(environment)), "zig build-lib for x86_64-windows-msvc")?
-	_ = exec!(loud(tool(zig, ["cc", "-target", "x86_64-windows-msvc", "-O2", "-g0", "-nostdinc", "-c", "-x", "c", "-", "-o", "app.obj"], link).envs_str(environment).stdin(Bytes(Str.to_utf8("int roc_main(void) { return 0; }\n")))), "zig cc app.obj")?
-	_ = exec!(loud(tool(zig, ["lld-link", "/nodefaultlib", "/subsystem:console", "/machine:x64", "/opt:ref", "/out:probe.exe", "/wholearchive:host.lib", "app.obj"].concat(LinkInputs.windows_files), link).envs_str(environment)), "zig lld-link")?
+	_ = exec!(loud(tool(zig, ["build-lib", "${root}/src/host.zig", "-target", "x86_64-windows-msvc", "-O", "ReleaseSafe", "-fcompiler-rt", "-femit-bin=host.lib"], link).envs(environment)), "zig build-lib for x86_64-windows-msvc")?
+	_ = exec!(loud(tool(zig, ["cc", "-target", "x86_64-windows-msvc", "-O2", "-g0", "-nostdinc", "-c", "-x", "c", "-", "-o", "app.obj"], link).envs(environment).stdin(Bytes(Str.to_utf8("int roc_main(void) { return 0; }\n")))), "zig cc app.obj")?
+	_ = exec!(loud(tool(zig, ["lld-link", "/nodefaultlib", "/subsystem:console", "/machine:x64", "/opt:ref", "/out:probe.exe", "/wholearchive:host.lib", "app.obj"].concat(LinkInputs.windows_files), link).envs(environment)), "zig lld-link")?
 	Ok({})
 }
 
@@ -515,7 +516,7 @@ toolchain! = |work, lock| {
 	download!("${url}.minisig", signature)?
 	_ = exec!(loud(tool("minisign", ["-Vm", archive, "-x", signature, "-P", JsonValue.get_text(lock, "zig_minisign_key")?], work)), "minisign verification of ${url}")?
 	installed = "${work}/toolchain"
-	listing = exec!(tool("tar", ["-tvJf", archive], work).output_limit(256 * 1024 * 1024), "tar -tv ${archive}")?
+	listing = exec!(tool("tar", ["-tvJf", archive], work).output_limit(MaxBytes(256 * 1024 * 1024)), "tar -tv ${archive}")?
 	_ = LinkInputs.tar_entries(Str.from_utf8_lossy(listing.stdout), 2_000_000_000)?
 	create_all!(installed)?
 	_ = exec!(tool("tar", ["-xJf", archive, "-C", installed, "--no-same-owner"], work), "tar -x ${archive}")?
@@ -557,10 +558,10 @@ check_objcopy! = |lock| {
 
 machine! : () => Try(Str, Str)
 machine! = || {
-	host = Env.platform!()
-	match (host.os, host.arch) {
-		(LINUX, X64) => Ok("x86_64")
-		(LINUX, AARCH64) => Ok("aarch64")
+	host = System.target!()
+	match (host.os(), host.arch()) {
+		(Linux(_), X64) => Ok("x86_64")
+		(Linux(_), Arm64) => Ok("aarch64")
 		_ => Err("The linker-input producer requires x86-64 or ARM64 Linux")
 	}
 }
@@ -599,21 +600,21 @@ in_work! = |root, prefix, work!| {
 Ran : { stdout : List(U8), stderr : List(U8) }
 
 ## Run a command to completion; anything but a zero exit status is an error.
-exec! : Cmd, Str => Try(Ran, Str)
+exec! : Cmd.Command, Str => Try(Ran, Str)
 exec! = |command, what|
 	match command.run!() {
-		Ok({ status: Exited(0), stdout_bytes, stderr_bytes }) => Ok({ stdout: stdout_bytes, stderr: stderr_bytes })
+		Ok({ status: Exited(0), stdout_bytes, stderr_bytes, .. }) => Ok({ stdout: stdout_bytes, stderr: stderr_bytes })
 		Ok({ status: Exited(code), stderr_bytes, .. }) => Err("${what} exited with code ${code.to_str()}\n${Str.from_utf8_lossy(stderr_bytes)}")
 		Ok({ status: Signaled(signal), .. }) => Err("${what} was killed by signal ${signal.to_str()}")
-		Err(OutputLimit(_)) => Err("${what} printed more than the output limit")
+		Err(CmdErr(OutputLimitExceeded(_))) => Err("${what} printed more than the output limit")
 		Err(_) => Err("could not run ${what}")
 	}
 
-tool : Str, List(Str), Str -> Cmd
-tool = |program, args, cwd| Cmd.new_str(program).args_str(args).cwd(Path.unix(cwd)).output_limit(1024 * 1024 * 1024)
+tool : Str, List(Str), Str -> Cmd.Command
+tool = |program, args, cwd| Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).cwd(Path.unix(cwd)).output_limit(MaxBytes(1024 * 1024 * 1024))
 
 ## Show the command's output as it runs instead of capturing it.
-loud : Cmd -> Cmd
+loud : Cmd.Command -> Cmd.Command
 loud = |command| command.stdout(Inherit).stderr(Inherit)
 
 lines : List(U8) -> List(Str)

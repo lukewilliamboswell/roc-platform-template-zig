@@ -353,8 +353,8 @@ LinkInputs := [].{
 		var $inventory = []
 		for field in files {
 			match field.value {
-				Text(sha256) => {
-					$inventory = $inventory.append({ name: field.key, sha256 })
+				Text(digest) => {
+					$inventory = $inventory.append({ name: field.key, sha256: digest })
 				}
 				_ => return Err("Invalid runtime inventory")
 			}

@@ -1,10 +1,11 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-25-d5a4f1e",
 }
 
 import cli.Cmd
+import cli.Duration
 import cli.Env
 import cli.OsStr
 import cli.Path
@@ -16,7 +17,7 @@ import src/Bundle
 ## never glob local binaries. Run from the repository root after `zig build`.
 ##
 ##   scripts/bundle.roc                          the bundle, in the repository root
-##   scripts/bundle.roc -- --output-dir DIR      the bundle, in DIR
+##   scripts/bundle.roc --output-dir DIR      the bundle, in DIR
 ##
 ## The bundle holds the platform's Roc modules, each target's host library,
 ## the locked linker inputs for each target, their licenses and sources, and
@@ -88,7 +89,7 @@ run! = |output| {
 	output_dir = Path.utf8(Bundle.resolve(Path.display(cwd), output))
 	Path.create_all!(output_dir).map_err(|_| "cannot create ${Path.display(output_dir)}")?
 	files = sources.map(|source| source.name)
-	ran = Cmd.new(OsStr.from_str("roc")).args(["bundle"].concat(files).concat(["--output-dir", Path.display(output_dir)]).map(OsStr.from_str)).cwd(staging).stdout(Capture).stderr(Capture).timeout_ms(600_000).output_limit(10_000_000).run!().map_err(|_| "roc bundle did not complete")?
+	ran = Cmd.new(OsStr.from_str("roc")).args(["bundle"].concat(files).concat(["--output-dir", Path.display(output_dir)]).map(OsStr.from_str)).cwd(staging).stdout(Capture).stderr(Capture).timeout(Duration.seconds(600)).output_limit(MaxBytes(10_000_000)).run!().map_err(|_| "roc bundle did not complete")?
 	report = "${Str.from_utf8_lossy(ran.stdout_bytes)}${Str.from_utf8_lossy(ran.stderr_bytes)}"
 	if ran.status != Exited(0) {
 		Stderr.line!(report).map_err(|_| "cannot write to stderr")?
@@ -127,7 +128,7 @@ names! = |directory| {
 ## The SHA-256 of each of `files`, relative to `directory`, in order.
 sha256! : Path, List(Str) => Try(List(Str), Str)
 sha256! = |directory, files| {
-	ran = Cmd.new(OsStr.from_str("sha256sum")).args(["--"].concat(files).map(OsStr.from_str)).cwd(directory).stdout(Capture).stderr(Capture).timeout_ms(600_000).output_limit(10_000_000).run!().map_err(|_| "sha256sum did not complete")?
+	ran = Cmd.new(OsStr.from_str("sha256sum")).args(["--"].concat(files).map(OsStr.from_str)).cwd(directory).stdout(Capture).stderr(Capture).timeout(Duration.seconds(600)).output_limit(MaxBytes(10_000_000)).run!().map_err(|_| "sha256sum did not complete")?
 	if ran.status != Exited(0) {
 		return Err("sha256sum failed in ${Path.display(directory)}")
 	}
@@ -138,9 +139,10 @@ sha256! = |directory, files| {
 succeed! : Str, List(Str) => Try({}, Str)
 succeed! = |program, args| {
 	Stdout.line!("+ ${program} ${Str.join_with(args, " ")}").map_err(|_| "cannot write to stdout")?
-	match Cmd.new_str(program).args_str(args).exec_exit_code!() {
-		Ok(0) => Ok({})
-		Ok(code) => Err("${program} ${Str.join_with(args, " ")} exited with code ${code.to_str()}")
+	match Cmd.new(OsStr.from_str(program)).args(args.map(OsStr.from_str)).inherit_stdio().run!() {
+		Ok({ status: Exited(0), .. }) => Ok({})
+		Ok({ status: Exited(code), .. }) => Err("${program} ${Str.join_with(args, " ")} exited with code ${code.to_str()}")
+		Ok({ status: Signaled(signal), .. }) => Err("${program} was killed by signal ${signal.to_str()}")
 		Err(_) => Err("could not run ${program}")
 	}
 }

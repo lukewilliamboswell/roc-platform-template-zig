@@ -147,7 +147,7 @@ fn hostedStdoutLine(str: abi.RocStr) callconv(.c) abi.HostStdout_lineResult {
     return stdoutLineOk();
 }
 
-fn hostAlloc(length: usize, alignment: usize) callconv(.c) ?*anyopaque {
+fn hostAlloc(length: usize, alignment: usize) callconv(.c) *anyopaque {
     return abi.DefaultAllocators.rocAlloc(g_roc_host.?, length, alignment);
 }
 
@@ -155,7 +155,7 @@ fn hostDealloc(ptr: *anyopaque, alignment: usize) callconv(.c) void {
     abi.DefaultAllocators.rocDealloc(g_roc_host.?, ptr, alignment);
 }
 
-fn hostRealloc(ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) ?*anyopaque {
+fn hostRealloc(ptr: *anyopaque, new_length: usize, alignment: usize) callconv(.c) *anyopaque {
     return abi.DefaultAllocators.rocRealloc(g_roc_host.?, ptr, new_length, alignment);
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env roc-stable
 app [main!] {
-	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.25.0/CZsY7tYZwR3rj9kYbpaCfxki2yVAaRL8bBwMLvB2xkbA.tar.zst",
-	roc: "nightly-2026-10-09-258ab27",
+	cli: platform "https://github.com/roc-lang/basic-cli/releases/download/0.28.1/7brgwR8YUqfeGrkdfF1V4GPPN7DnP7ftqub9KcrTEZtr.tar.zst",
+	roc: "nightly-2026-11-25-d5a4f1e",
 }
 
 import cli.Cmd
@@ -18,9 +18,11 @@ main! = |args| {
 	parsed = Json.parse(source)
 	suite = parsed.map_err(|_| Exit(1))?
 	for example in suite.apps {
-		code = Cmd.new_str("roc").args_str(["test", example.path, "--no-cache"]).exec_exit_code!().map_err(|_| Exit(1))?
-		if code != 0 {
-			return Err(Exit(code))
+		output = Cmd.new("roc").args(["test", OsStr.from_str(example.path), "--no-cache"]).inherit_stdio().run!().map_err(|_| Exit(1))?
+		match output.status {
+			Exited(0) => {}
+			Exited(code) => return Err(Exit(code))
+			Signaled(_) => return Err(Exit(1))
 		}
 	}
 	Ok({})
